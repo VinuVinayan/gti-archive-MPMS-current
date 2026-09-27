@@ -15,8 +15,8 @@ import {
 import {
   completeStageFourConcepts,
   completeStageThreeConcepts,
-  completeStageThreeTaskWithoutFile,
-  requestStageThreeTaskCompletion,
+  completeProjectConceptTaskWithoutFile,
+  requestProjectConceptTaskCompletion,
   createProjectConceptFolder,
   deleteProjectConceptFolder,
   editProjectConceptFolder,
@@ -251,16 +251,16 @@ export async function markProjectConceptApprovedAttachmentAction(input: {
   }
 }
 
-export async function requestStageThreeTaskCompletionAction(input: { projectId: string; folderId: string; note?: string }) {
+export async function requestProjectConceptTaskCompletionAction(input: { projectId: string; folderId: string; stageKey: ConceptWorkflowStageKey; note?: string }) {
   const user = await requireUser();
   try {
-    const result = await requestStageThreeTaskCompletion(user, input);
+    const result = await requestProjectConceptTaskCompletion(user, input);
     if (!("error" in result)) {
-      revalidateConceptStage(input.projectId, "CONCEPT_CREATION");
+      revalidateConceptStage(input.projectId, input.stageKey);
       revalidatePath(`/projects/${input.projectId}`);
       revalidatePath(`/projects/${input.projectId}/workspace`);
-      revalidatePath(`/projects/${input.projectId}/stages/3/concepts`);
-      revalidatePath(`/projects/${input.projectId}/stages/3/concepts/${input.folderId}`);
+      revalidatePath(`/projects/${input.projectId}/stages/${getConceptStageNumber(input.stageKey)}/concepts`);
+      revalidatePath(`/projects/${input.projectId}/stages/${getConceptStageNumber(input.stageKey)}/concepts/${input.folderId}`);
       if (result.changed) {
         publishProjectActivityUpdatedAfterResponse({
           projectId: input.projectId, stageId: result.taskerStageId,
@@ -278,15 +278,15 @@ export async function requestStageThreeTaskCompletionAction(input: { projectId: 
   }
 }
 
-export async function completeStageThreeTaskWithoutFileAction(input: { projectId: string; folderId: string }) {
+export async function completeProjectConceptTaskWithoutFileAction(input: { projectId: string; folderId: string; stageKey: ConceptWorkflowStageKey }) {
   const user = await requireUser();
   try {
-    const result = await completeStageThreeTaskWithoutFile(user, input);
+    const result = await completeProjectConceptTaskWithoutFile(user, input);
     if (!("error" in result)) {
-      revalidateConceptStage(input.projectId, "CONCEPT_CREATION");
+      revalidateConceptStage(input.projectId, input.stageKey);
       revalidatePath(`/projects/${input.projectId}`);
-      revalidatePath(`/projects/${input.projectId}/stages/3/concepts`);
-      revalidatePath(`/projects/${input.projectId}/stages/3/concepts/${input.folderId}`);
+      revalidatePath(`/projects/${input.projectId}/stages/${getConceptStageNumber(input.stageKey)}/concepts`);
+      revalidatePath(`/projects/${input.projectId}/stages/${getConceptStageNumber(input.stageKey)}/concepts/${input.folderId}`);
       revalidatePath(`/projects/${input.projectId}/workspace`);
       if (result.changed) {
         publishProjectActivityUpdatedAfterResponse({

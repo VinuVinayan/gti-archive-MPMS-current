@@ -265,7 +265,7 @@ type FilelessConceptTask = {
 };
 
 function isOpenConceptWithoutSubmission(project: ConceptProject, folder: FilelessConceptTask, stageKey: ConceptWorkflowStageKey) {
-  return stageKey === ProjectWorkflowStageKey.CONCEPT_CREATION &&
+  return isSupportedConceptStageKey(stageKey) &&
     getWorkflowStageStatus(project, stageKey) === ProjectWorkflowStageStatus.AVAILABLE &&
     !project.completedAt && !project.archivedAt && !isProjectStatusCompleted(project.status) &&
     !folder.approvedAttachmentId && !folder.approvedAttachment && !folder.completedWithoutFileAt &&
@@ -509,7 +509,7 @@ export async function getProjectConceptFolders(
           id: folder.id,
           name: folder.name,
           isApproved: Boolean(folder.approvedAttachment),
-          completedWithoutFile: stageKey === ProjectWorkflowStageKey.CONCEPT_CREATION && isConceptCompletedWithoutFile(folder),
+          completedWithoutFile: isConceptCompletedWithoutFile(folder),
           canCompleteWithoutFile: canCompleteConceptWithoutFile(user, project, folder, stageKey),
         }))
       : [],
@@ -1711,6 +1711,7 @@ export async function markStageFourFinalApprovedAttachment(
               where: { id: folder.id },
               data: {
                 approvedAttachmentId: attachment.id,
+                completedWithoutFileAt: null, completionRequestedAt: null, completionRequestNote: null,
                 approvedById: user.id,
                 approvedAt,
               },
@@ -1730,6 +1731,7 @@ export async function markStageFourFinalApprovedAttachment(
               projectId: input.projectId,
               workflowStageKey: ProjectWorkflowStageKey.PROJECT_DEVELOPMENT,
               approvedAttachmentId: null,
+              NOT: { completedWithoutFileAt: { not: null }, taskerStage: { status: StageStatus.COMPLETED } },
             },
           });
 
@@ -2404,8 +2406,23 @@ export async function revokeStageFourFinalApprovedAttachment(
 export async function requestStageThreeTaskCompletion(
   user: PermissionUser,
   input: { projectId: string; folderId: string; note?: string },
+) {
+  return requestProjectConceptTaskCompletion(user, { ...input, stageKey: ProjectWorkflowStageKey.CONCEPT_CREATION });
+}
+
+export async function completeStageThreeTaskWithoutFile(
+  user: PermissionUser,
+  input: { projectId: string; folderId: string },
+) {
+  return completeProjectConceptTaskWithoutFile(user, { ...input, stageKey: ProjectWorkflowStageKey.CONCEPT_CREATION });
+}
+
+export async function requestProjectConceptTaskCompletion(
+  user: PermissionUser,
+  input: { projectId: string; folderId: string; stageKey: ConceptWorkflowStageKey; note?: string },
   conflictRetryCount = 0,
 ): Promise<{ changed: boolean; taskerStageId: string } | { error: string }> {
+  if (!isSupportedConceptStageKey(input.stageKey)) return { error: "Task completion is available only in Stages 3 and 4." };
   if (input.note !== undefined && typeof input.note !== "string") return { error: "Enter a text note." };
   const note = input.note?.trim() || null;
   if (note && note.length > 2_000) return { error: "The completion note must be 2,000 characters or fewer." };
@@ -2414,15 +2431,15 @@ export async function requestStageThreeTaskCompletion(
       const folder = await tx.projectConceptFolder.findFirst({
         where: {
           id: input.folderId, projectId: input.projectId,
-          workflowStageKey: ProjectWorkflowStageKey.CONCEPT_CREATION,
+          workflowStageKey: input.stageKey,
           taskerStage: { projectId: input.projectId, isTasker: true },
         },
         select: { ...conceptFolderSelect, project: { select: projectStageAccessSelect } },
       });
       if (!folder || folder.assignedExecutorId !== user.id) {
-        return { error: "Only the assigned executor can request completion of this Stage 3 task." };
+        return { error: "Only the assigned executor can request completion of this task." };
       }
-      if (!isOpenConceptWithoutSubmission(folder.project, folder, ProjectWorkflowStageKey.CONCEPT_CREATION)) {
+      if (!isOpenConceptWithoutSubmission(folder.project, folder, input.stageKey)) {
         return { error: folder.taskerStage._count.attachments > 0 || folder.approvedAttachment
           ? "This task already has a file submission or upload in progress. Use the file review process."
           : "Completion cannot be requested because the task, stage, or project is closed." };
@@ -2442,35 +2459,36 @@ export async function requestStageThreeTaskCompletion(
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 15_000 }));
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
-      if (conflictRetryCount < 2) return requestStageThreeTaskCompletion(user, input, conflictRetryCount + 1);
+      if (conflictRetryCount < 2) return requestProjectConceptTaskCompletion(user, input, conflictRetryCount + 1);
       return { error: "The task changed at the same time. Please try again." };
     }
     throw error;
   }
 }
 
-export async function completeStageThreeTaskWithoutFile(
+export async function completeProjectConceptTaskWithoutFile(
   user: PermissionUser,
-  input: { projectId: string; folderId: string },
+  input: { projectId: string; folderId: string; stageKey: ConceptWorkflowStageKey },
   conflictRetryCount = 0,
 ): Promise<{ changed: boolean; taskerStageId: string } | { error: string }> {
+  if (!isSupportedConceptStageKey(input.stageKey)) return { error: "Task completion is available only in Stages 3 and 4." };
   try {
     return await withPrismaRetry(() => prisma.$transaction(async (tx) => {
       const folder = await tx.projectConceptFolder.findFirst({
         where: {
           id: input.folderId, projectId: input.projectId,
-          workflowStageKey: ProjectWorkflowStageKey.CONCEPT_CREATION,
+          workflowStageKey: input.stageKey,
           taskerStage: { projectId: input.projectId, isTasker: true },
         },
         select: { ...conceptFolderSelect, project: { select: projectStageAccessSelect } },
       });
-      if (!folder) return { error: "Stage 3 task not found." };
-      const context = getConceptAccessContext(folder.project, folder, ProjectWorkflowStageKey.CONCEPT_CREATION);
+      if (!folder) return { error: "Task not found." };
+      const context = getConceptAccessContext(folder.project, folder, input.stageKey);
       if (!canCompleteProjectConceptStage(user, context)) {
         return { error: "Only the project owner or an administrator can complete a task without a file." };
       }
       if (isConceptCompletedWithoutFile(folder)) return { changed: false, taskerStageId: folder.taskerStageId };
-      if (!canCompleteConceptWithoutFile(user, folder.project, folder, ProjectWorkflowStageKey.CONCEPT_CREATION)) {
+      if (!canCompleteConceptWithoutFile(user, folder.project, folder, input.stageKey)) {
         return { error: folder.taskerStage._count.attachments > 0 || folder.approvedAttachment
           ? "This task has a submitted file or an upload in progress. Review the submission to complete it."
           : "This task cannot be completed because the task, stage, or project is closed." };
@@ -2493,7 +2511,7 @@ export async function completeStageThreeTaskWithoutFile(
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 15_000 }));
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
-      if (conflictRetryCount < 2) return completeStageThreeTaskWithoutFile(user, input, conflictRetryCount + 1);
+      if (conflictRetryCount < 2) return completeProjectConceptTaskWithoutFile(user, input, conflictRetryCount + 1);
       return { error: "The task changed at the same time. Please try again." };
     }
     throw error;
@@ -2748,6 +2766,7 @@ export async function completeStageFourConcepts(
             where: { id: input.projectId },
             select: {
               id: true,
+              completedAt: true, archivedAt: true, status: projectStageAccessSelect.status,
               category: true,
               ownerId: true,
               coOwners: { select: { userId: true } },
@@ -2813,8 +2832,12 @@ export async function completeStageFourConcepts(
           if (!canCompleteProjectConceptStage(user, managerContext)) {
             return {
               error:
-                "Only a project owner, co-owner, or administrator can complete Stage 4.",
+                "Only the project owner or an administrator can complete Stage 4.",
             };
+          }
+
+          if (project.completedAt || project.archivedAt || isProjectStatusCompleted(project.status)) {
+            return { error: "Stage 4 cannot be completed because the project is closed." };
           }
 
           const stageFourWorkflow = project.workflowStages.find(
@@ -3031,19 +3054,12 @@ export async function completeStageFourConcepts(
             (folder) => Boolean(folder.approvedAttachmentId),
           );
           const conceptsWithoutFinalFile = stageFourConcepts
-            .filter((folder) => !folder.approvedAttachmentId)
+            .filter((folder) => !folder.approvedAttachmentId && !isConceptCompletedWithoutFile(folder))
             .map((folder) => ({ id: folder.id, name: folder.name }));
-
-          if (finalConcepts.length === 0) {
-            return {
-              error:
-                "At least one concept must have a Final Approved File before Stage 4 can be completed.",
-            };
-          }
 
           if (conceptsWithoutFinalFile.length > 0) {
             return {
-              error: `Every Stage 4 concept must receive Final Approval before Stage 4 can be completed. Pending: ${conceptsWithoutFinalFile.map((concept) => concept.name).join(", ")}.`,
+              error: `Every Stage 4 task must have a Final Approved File or be marked as complete before Stage 4 can be completed. Pending: ${conceptsWithoutFinalFile.map((concept) => concept.name).join(", ")}.`,
             };
           }
 

@@ -7860,11 +7860,11 @@ export function ProjectChatWorkspace({
             </dl>
             {conceptMode.completedWithoutFile ? <span className="rounded-full bg-[#e7f5eb] px-3 py-1.5 text-[11px] font-semibold text-[#247247]">Completed · No file</span> : null}
             {conceptMode.canCompleteWithoutFile && activeStage && !isStageCompleted ? (
-              <CompleteConceptTaskButton projectId={project.id} folderId={conceptMode.folderId} name={conceptMode.conceptName} completionRequest={conceptMode.completionRequest} onCompleted={() => setStageCardOverrides((current) => ({
+              <CompleteConceptTaskButton projectId={project.id} folderId={conceptMode.folderId} stageKey={conceptMode.workflowStageKey} name={conceptMode.conceptName} completionRequest={conceptMode.completionRequest} onCompleted={() => setStageCardOverrides((current) => ({
                 ...current, [activeStage.id]: { ...current[activeStage.id], actualStartedAt: activeStage.actualStartedAt, actualStartedAtValue: activeStage.actualStartedAtValue, status: "completed" },
               }))} />
             ) : null}
-            {conceptMode.canRequestCompletion && !isStageCompleted ? <RequestConceptCompletionButton projectId={project.id} folderId={conceptMode.folderId} name={conceptMode.conceptName} /> : null}
+            {conceptMode.canRequestCompletion && !isStageCompleted ? <RequestConceptCompletionButton projectId={project.id} folderId={conceptMode.folderId} stageKey={conceptMode.workflowStageKey} name={conceptMode.conceptName} /> : null}
             {canRevokeConceptApproval ? (
               <Button
                 type="button"

@@ -901,7 +901,7 @@ async function main() {
     });
     check(
       isError(prematureCompletion) &&
-        prematureCompletion.error.includes("Every Stage 4 concept") &&
+        prematureCompletion.error.includes("Every Stage 4 task") &&
         prematureCompletion.error.includes(conceptC.name),
       "Stage 4 completion must identify and reject concepts still awaiting Final Approval",
     );

@@ -108,9 +108,9 @@ export async function notifyConceptTaskCompletion(input: {
   projectId: string; folderId: string; actorId: string; event: "requested" | "completed";
 }) {
   const folder = await withPrismaRetry(() => prisma.projectConceptFolder.findFirst({
-    where: { id: input.folderId, projectId: input.projectId, workflowStageKey: "CONCEPT_CREATION" },
+    where: { id: input.folderId, projectId: input.projectId, workflowStageKey: { in: ["CONCEPT_CREATION", "PROJECT_DEVELOPMENT"] } },
     select: {
-      id: true, name: true, taskerStageId: true, assignedExecutorId: true,
+      id: true, name: true, workflowStageKey: true, taskerStageId: true, assignedExecutorId: true,
       completionRequestedAt: true, completedWithoutFileAt: true,
       assignedExecutor: { select: { user: { select: { name: true, email: true } } } },
       project: { select: { name: true, ownerId: true } },
@@ -131,7 +131,7 @@ export async function notifyConceptTaskCompletion(input: {
       : `${folder.name} in ${folder.project.name} has been completed without a file submission.`,
     entityType: "STAGE", entityId: folder.taskerStageId,
     projectId: input.projectId, stageId: folder.taskerStageId,
-    url: `/projects/${encodeURIComponent(input.projectId)}/stages/3/concepts/${encodeURIComponent(folder.id)}`,
+    url: `/projects/${encodeURIComponent(input.projectId)}/stages/${folder.workflowStageKey === "CONCEPT_CREATION" ? 3 : 4}/concepts/${encodeURIComponent(folder.id)}`,
   });
 }
 
@@ -314,7 +314,9 @@ export async function notifyStageFiveActivated(input: {
       ? input.finalFileCount > 0
         ? `Stage 4 was skipped in ${project.name}. ${input.finalFileCount} approved Stage 3 file${input.finalFileCount === 1 ? " is" : "s are"} ready for file checklists.`
         : `Stage 4 was skipped in ${project.name}. Upload the final file directly in Stage 5 to start its checklist.`
-      : `${input.finalFileCount} final approved file${input.finalFileCount === 1 ? " is" : "s are"} ready for file checklists in ${project.name}.`,
+      : input.finalFileCount > 0
+        ? `${input.finalFileCount} final approved file${input.finalFileCount === 1 ? " is" : "s are"} ready for file checklists in ${project.name}.`
+        : `Stage 4 is complete in ${project.name}. Stage 5 is now available; a final file can be uploaded there.`,
     entityType: "PROJECT",
     entityId: project.id,
     projectId: project.id,
