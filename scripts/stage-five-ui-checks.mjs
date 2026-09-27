@@ -186,12 +186,12 @@ assert(
   "Image/file-bearing checklist controls must support multiple files across manager and request flows.",
 );
 assert(
-  workspace.includes("<Select") &&
-    workspace.includes("<SelectTrigger") &&
-    workspace.includes("<SelectContent") &&
-    workspace.includes("<SelectItem") &&
-    workspace.includes("onValueChange={updateSelectedFile}"),
-  "Stage 5 file switching must use the themed GTI Select control.",
+  workspace.includes("<FileChecklistSwitcher") &&
+    workspace.includes('aria-label="Final file checklists"') &&
+    workspace.includes("aria-pressed={selected}") &&
+    workspace.includes("onSelect={updateSelectedFile}") &&
+    !workspace.includes("onValueChange={updateSelectedFile}"),
+  "Stage 5 file switching must expose selectable file tiles like Stage 6.",
 );
 const readOnlyView = workspace.slice(
   workspace.indexOf("function StageFiveReadOnlyView"),
