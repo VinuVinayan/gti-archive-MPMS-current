@@ -5,6 +5,7 @@ import {
   AttachmentStatus,
   ProductionApprovalRecipientType,
   ProductionApprovalStepStatus,
+  ProductionDispatchStatus,
   ProductionHandoverDeliveryStatus,
   ProductionHandoverRoute,
   ProjectExecutionType,
@@ -227,6 +228,8 @@ async function createProjectFixture(input: {
 }
 
 async function main() {
+  const originalSlavomirEmail = process.env.SLAVOMIR_APPROVAL_EMAIL;
+  process.env.SLAVOMIR_APPROVAL_EMAIL = "slavomir-production@example.test";
   process.env.AWS_REGION ||= "us-east-1";
   process.env.AWS_ACCESS_KEY_ID ||= "stage-six-test";
   process.env.AWS_SECRET_ACCESS_KEY ||= "stage-six-test-secret";
@@ -424,7 +427,7 @@ async function main() {
     check(isError(await sendProductionApprovalRequest(owner, { projectId: ids.project, productionUnitId: unitA.id, stepId: initialStep.id }, { sendEmail: sendSuccess })), "an unassigned placeholder cannot be sent");
     const initialWorkspace = await getStageSixWorkspaceData(owner, ids.project);
     const placeholder = initialWorkspace?.units.find((unit) => unit.id === unitA.id)?.approvalSteps[0];
-    check(placeholder?.recipientEmail === null && placeholder?.recipientType === null, "the initial recipient must be blank in the UI");
+    check(placeholder?.recipientName === "Slavomir Kluziak" && placeholder.recipientEmail === "slavomir-production@example.test" && !placeholder.isConfigured, "the initial step must show the environment recipient while still requiring explicit configuration");
     const productionAttachmentId = `s6-production-${runId}`;
     await prisma.projectAttachment.create({ data: { id: productionAttachmentId, projectId: ids.project, uploadedById: ids.owner, fileName: `production-${runId}.pdf`, originalFileName: "Production-A.pdf", mimeType: "application/pdf", fileSize: 2048, bucket: "stage-six-integration", storageKey: `stage-six/${runId}/production-a`, assetType: AttachmentAssetType.GENERAL_PROJECT_ASSET, status: AttachmentStatus.READY } });
     const associated = await addProductionUnitFile(owner, { projectId: ids.project, productionUnitId: unitA.id, attachmentId: productionAttachmentId });
@@ -449,10 +452,27 @@ async function main() {
     const additional = concurrentAdds.find((result) => !isError(result) && !result.duplicate);
     check(additional && !isError(additional) && "step" in additional && additional.step && additional.step.sequence === 2, "additional approver must append after required Step 1");
     check(concurrentAdds.filter((result) => !isError(result) && result.duplicate).length === 1, "concurrent Add Approver submit must create exactly one step");
-    const configuredA = await configureMarketingDirector(owner, { clientRequestId: `md-a-${runId}`, projectId: ids.project, productionUnitId: unitA.id, recipientType: ProductionApprovalRecipientType.EXTERNAL_EMAIL, recipientName: "First Reviewer", recipientEmail: "first-reviewer@example.test", sharedFieldKeys: [ProjectFileChecklistField.OUTPUT_NAME], selectedFileIds: [unitA.sourceAttachmentId, productionAttachmentId], message: "Required review" }, { sendEmail: sendSuccess });
-    check(!isError(configuredA) && "step" in configuredA && configuredA.step, "the first approver must be selectable");
+    const directorInput: Parameters<typeof configureMarketingDirector>[1] = { clientRequestId: `md-a-${runId}`, projectId: ids.project, productionUnitId: unitA.id, recipientType: ProductionApprovalRecipientType.EXTERNAL_EMAIL, recipientName: "First Reviewer", recipientEmail: "first-reviewer@example.test", sharedFieldKeys: [ProjectFileChecklistField.OUTPUT_NAME], selectedFileIds: [unitA.sourceAttachmentId, productionAttachmentId], message: "Required review" };
+    for (const email of [undefined, "", "invalid-address", "test@example.test\nBcc: other@example.test"]) {
+      if (email === undefined) delete process.env.SLAVOMIR_APPROVAL_EMAIL;
+      else process.env.SLAVOMIR_APPROVAL_EMAIL = email;
+      check(isError(await configureMarketingDirector(owner, directorInput)), "a missing or invalid environment email must block configuration despite a valid payload address");
+    }
+    process.env.SLAVOMIR_APPROVAL_EMAIL = " Slavomir-Production@Example.Test ";
+    const configuredA = await configureMarketingDirector(owner, directorInput, { sendEmail: sendSuccess });
+    check(!isError(configuredA) && "step" in configuredA && configuredA.step, "the first approver must use the configured environment recipient");
     check(emailLog.length === 0, "adding and assigning approvers must not send email");
     const manualInput = { projectId: ids.project, productionUnitId: unitA.id, stepId: configuredA.step.id };
+    const savedDirector = await prisma.productionApprovalStep.findUniqueOrThrow({ where: { id: configuredA.step.id } });
+    check(savedDirector.recipientName === "Slavomir Kluziak" && savedDirector.recipientEmail === "slavomir-production@example.test" && savedDirector.recipientUserId === null, "configuration must persist the fixed name and normalized environment email, ignoring client recipient values");
+    for (const email of [undefined, "", "invalid-address"]) {
+      if (email === undefined) delete process.env.SLAVOMIR_APPROVAL_EMAIL;
+      else process.env.SLAVOMIR_APPROVAL_EMAIL = email;
+      check(isError(await sendProductionApprovalRequest(owner, manualInput, { sendEmail: sendSuccess })), "missing or invalid configuration must block sending without using the stored address");
+      const blocked = await prisma.productionApprovalStep.findUniqueOrThrow({ where: { id: configuredA.step.id } });
+      check(blocked.status === ProductionApprovalStepStatus.WAITING && !blocked.externalTokenHash, "invalid configuration must not activate the step or create a token");
+    }
+    process.env.SLAVOMIR_APPROVAL_EMAIL = "slavomir-dev@example.test";
     check(isError(await sendProductionApprovalRequest(approver, manualInput, { sendEmail: sendSuccess })), "a USER cannot send approval requests");
     check(isError(await sendProductionApprovalRequest(outsider, manualInput, { sendEmail: sendSuccess })), "an outsider cannot send approval requests");
     check(isError(await sendProductionApprovalRequest(owner, { ...manualInput, productionUnitId: unitB.id }, { sendEmail: sendSuccess })), "cross-unit approval requests must fail");
@@ -460,6 +480,7 @@ async function main() {
     check(isError(await sendProductionApprovalRequest(owner, { ...manualInput, stepId: additional.step.id }, { sendEmail: sendSuccess })), "a later approver must wait for earlier approvals");
     const workspaceBeforeSend = await getStageSixWorkspaceData(owner, ids.project);
     check(workspaceBeforeSend?.units.find((unit) => unit.id === unitA.id)?.approvalSteps[0].status === ProductionApprovalStepStatus.WAITING && emailLog.length === 0, "opening the approval workspace must not send requests");
+    check(workspaceBeforeSend?.marketingDirectorRecipient.email === "slavomir-dev@example.test" && workspaceBeforeSend.units.find((unit) => unit.id === unitA.id)?.approvalSteps[0].recipientEmail === "slavomir-dev@example.test", "the waiting step and confirmation must reflect the current environment address");
     for (const field of ["completedAt", "archivedAt"] as const) {
       await prisma.project.update({ where: { id: ids.project }, data: { [field]: new Date() } });
       check(isError(await sendProductionApprovalRequest(owner, manualInput, { sendEmail: sendSuccess })), "a closed project must not send requests");
@@ -477,7 +498,8 @@ async function main() {
     ]);
     check(sentTogether.every((result) => !isError(result)) && sentTogether.filter((result) => !isError(result) && result.sent).length === 1 && Number(emailLog.length) === 1, "concurrent Send Approval Request clicks must dispatch once");
     const firstApproverMessage = emailLog.at(-1)!;
-    check(firstApproverMessage.to === "first-reviewer@example.test", "the first approval must go to the selected address");
+    check(firstApproverMessage.to === "slavomir-dev@example.test" && firstApproverMessage.text.includes("Hello Slavomir Kluziak,"), "the send must read the current environment address while retaining Slavomir’s name");
+    check((await prisma.productionApprovalStep.findUniqueOrThrow({ where: { id: configuredA.step.id } })).recipientEmail === "slavomir-dev@example.test", "the persisted recipient must match the address used for delivery");
     const stepOneToken = approvalToken(firstApproverMessage);
     check(await prisma.notification.count({ where: { entityId: configuredA.step.id, type: "PRODUCTION_APPROVAL_REQUESTED" } }) === 0, "the selected external first approver must not receive an in-app notification");
     check(await prisma.notification.count({ where: { entityId: additional.step.id, type: "PRODUCTION_APPROVAL_REQUESTED" } }) === 0, "waiting approvers must not be notified early");
@@ -557,8 +579,15 @@ async function main() {
     check(isError(failedApproval), "a failed explicit send must report delivery failure");
     const failedStep = await prisma.productionApprovalStep.findUniqueOrThrow({ where: { id: configuredB.step.id } });
     check(failedStep.dispatchStatus === "FAILED" && failedStep.externalTokenRevokedAt, "failed delivery must revoke its unused token");
+    for (const email of ["", "invalid-address"]) {
+      process.env.SLAVOMIR_APPROVAL_EMAIL = email;
+      check(isError(await retryProductionApprovalDispatch(owner, { projectId: ids.project, stepId: configuredB.step.id }, { sendEmail: sendSuccess })), "a retry must not fall back to the stored recipient if the environment is invalid");
+      check((await prisma.productionApprovalStep.findUniqueOrThrow({ where: { id: configuredB.step.id } })).dispatchStatus === ProductionDispatchStatus.FAILED, "blocked retries must remain retryable");
+    }
+    process.env.SLAVOMIR_APPROVAL_EMAIL = "slavomir-retry@example.test";
     check(!isError(await retryProductionApprovalDispatch(owner, { projectId: ids.project, stepId: configuredB.step.id }, { sendEmail: sendSuccess })), "retry must require another explicit action");
-    check(emailLog.at(-1)?.to === "marketing-b@example.test", "retry must deliver to the chosen approver");
+    check(emailLog.at(-1)?.to === "slavomir-retry@example.test", "retry must deliver to the latest environment address");
+    check((await prisma.productionApprovalStep.findUniqueOrThrow({ where: { id: configuredB.step.id } })).recipientEmail === "slavomir-retry@example.test", "retry history must record the actual delivery address");
     const unitBToken = approvalToken(emailLog.at(-1)!);
     const emailCountAfterUnitB = emailLog.length;
     const duplicateConfiguredB = await configureMarketingDirector(owner, { clientRequestId: `md-b-${runId}`, projectId: ids.project, productionUnitId: unitB.id, recipientType: ProductionApprovalRecipientType.EXTERNAL_EMAIL, recipientName: "Marketing Director B", recipientEmail: "marketing-b@example.test", sharedFieldKeys: [ProjectFileChecklistField.OUTPUT_NAME], selectedFileIds: [unitB.sourceAttachmentId] }, { sendEmail: sendSuccess });
@@ -1193,6 +1222,8 @@ async function main() {
     );
     console.log("Stage 5 -> Stage 6 production, approval, handover, security, and Stage 7 unlock integration checks passed.");
   } finally {
+    if (originalSlavomirEmail === undefined) delete process.env.SLAVOMIR_APPROVAL_EMAIL;
+    else process.env.SLAVOMIR_APPROVAL_EMAIL = originalSlavomirEmail;
     await prisma.project.deleteMany({ where: { id: { in: [ids.project, ids.rejectProject, ids.foreignProject] } } });
     await prisma.archiveCategory.deleteMany({
       where: { id: { in: [ids.archiveCategoryA, ids.archiveCategoryB] } },

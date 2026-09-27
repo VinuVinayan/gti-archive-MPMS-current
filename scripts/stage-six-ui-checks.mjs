@@ -215,7 +215,7 @@ assert(
 assert(
   workspace.includes("!step.isConfigured") &&
     service.includes("isConfigured: Boolean(clientRequestId)"),
-  "The first-step Assign action must be driven by persisted configuration state, with no default recipient.",
+  "The first-step Assign action must be driven by persisted configuration state; a configured environment recipient does not send automatically.",
 );
 assert(
   actions.includes("reorderProductionApproverAction") &&

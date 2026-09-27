@@ -64,6 +64,22 @@ import { disableProjectRequestReminders } from "@/lib/request-reminders";
 type EmailSender = typeof sendResendEmail;
 type StageProject = ProjectStageAccessRecord;
 
+const SLAVOMIR_APPROVAL_NAME = "Slavomir Kluziak";
+const SLAVOMIR_APPROVAL_CONFIGURATION_ERROR =
+  "Slavomir's approval email is missing or invalid. Ask an administrator to configure it.";
+
+// Read at request time so each deployment controls its own approval recipient.
+function getSlavomirApprovalRecipient() {
+  const recipientEmail = normalizeEmail(process.env.SLAVOMIR_APPROVAL_EMAIL ?? "");
+  if (!recipientEmail) return null;
+  return {
+    recipientType: ProductionApprovalRecipientType.EXTERNAL_EMAIL,
+    recipientUserId: null,
+    recipientName: SLAVOMIR_APPROVAL_NAME,
+    recipientEmail,
+  };
+}
+
 const accessibleStageSixProjectWhere = {
   workflowStages: {
     some: {
@@ -156,6 +172,7 @@ export type StageSixUnitRecord = {
 
 export type StageSixWorkspaceData = {
   units: StageSixUnitRecord[];
+  marketingDirectorRecipient: { name: string; email: string | null };
   participants: Array<{ id: string; name: string; email: string; role: string }>;
   handoverRecipients: Array<{ id: string; name: string; email: string; role: string }>;
   canManage: boolean;
@@ -626,6 +643,10 @@ export async function getStageSixWorkspaceData(
       }),
     ]),
   );
+  const marketingDirectorRecipient = {
+    name: SLAVOMIR_APPROVAL_NAME,
+    email: getSlavomirApprovalRecipient()?.recipientEmail ?? null,
+  };
   const units: StageSixUnitRecord[] = records.map((unit) => {
     const itemByKey = new Map(
       unit.sourceChecklist.items.map((item) => [item.fieldKey, item]),
@@ -636,6 +657,8 @@ export async function getStageSixWorkspaceData(
         step.isMarketingDirectorRequired &&
         step.sequence === 1 &&
         !step.clientRequestId;
+      const usesConfiguredRecipient = step.isMarketingDirectorRequired && !step.removedAt &&
+        (step.status === ProductionApprovalStepStatus.WAITING || step.dispatchStatus === ProductionDispatchStatus.FAILED);
       return {
         ...visibleStep,
         isConfigured: Boolean(clientRequestId),
@@ -646,9 +669,9 @@ export async function getStageSixWorkspaceData(
           step.dispatchStatus === ProductionDispatchStatus.SENT
             ? `/production-approvals/${step.id}`
             : null,
-        recipientType: isUnconfiguredFirstApprover ? null : step.recipientType,
-        recipientName: isUnconfiguredFirstApprover ? "Not assigned" : step.recipientName?.trim() || "Not assigned",
-        recipientEmail: isUnconfiguredFirstApprover ? null : step.recipientEmail,
+        recipientType: isUnconfiguredFirstApprover ? null : usesConfiguredRecipient ? ProductionApprovalRecipientType.EXTERNAL_EMAIL : step.recipientType,
+        recipientName: usesConfiguredRecipient ? marketingDirectorRecipient.name : step.recipientName?.trim() || "Not assigned",
+        recipientEmail: usesConfiguredRecipient ? marketingDirectorRecipient.email : step.recipientEmail,
         activatedAt: step.activatedAt?.toISOString() ?? null,
         sentAt: step.sentAt?.toISOString() ?? null,
         decidedAt: step.decidedAt?.toISOString() ?? null,
@@ -699,6 +722,7 @@ export async function getStageSixWorkspaceData(
   });
   return {
     units,
+    marketingDirectorRecipient,
     participants: getParticipants(project),
     handoverRecipients: getHandoverRecipients(project),
     canManage: canManageStageSix(user, project),
@@ -1228,14 +1252,8 @@ export async function configureMarketingDirector(
   }
   const project = await getStageSixManagerProject(user, input.projectId);
   if (!project) return { error: "You do not have permission to manage Stage 6." } as const;
-  const recipient = await resolveRecipient(project, input);
-  if (!recipient.ok) return { error: recipient.error } as const;
-  const recipientData = {
-    recipientType: recipient.recipientType,
-    recipientUserId: recipient.recipientUserId,
-    recipientName: recipient.recipientName,
-    recipientEmail: recipient.recipientEmail,
-  };
+  const recipientData = getSlavomirApprovalRecipient();
+  if (!recipientData) return { error: SLAVOMIR_APPROVAL_CONFIGURATION_ERROR } as const;
   const message = sanitizeRichText(input.message) || null;
   let prepared;
   try {
@@ -1835,6 +1853,7 @@ export async function sendProductionApprovalRequest(
             select: {
               id: true, productionUnitId: true, sequence: true, status: true,
               dispatchStatus: true, clientRequestId: true,
+              isMarketingDirectorRequired: true,
               recipientType: true, recipientUserId: true, recipientName: true, recipientEmail: true,
               sharedFieldKeys: true, selectedFileIds: true,
             },
@@ -1857,16 +1876,21 @@ export async function sendProductionApprovalRequest(
       if (!step.clientRequestId || !step.recipientType || !step.recipientName || !step.recipientEmail) {
         return { error: "Assign a recipient and select the information to share before sending." } as const;
       }
-      if (step.recipientType === ProductionApprovalRecipientType.EXISTING_COLLABORATOR &&
-          (!step.recipientUserId || !isProjectParticipant(project, step.recipientUserId))) {
+      const configuredRecipient = step.isMarketingDirectorRequired ? getSlavomirApprovalRecipient() : null;
+      if (step.isMarketingDirectorRequired && !configuredRecipient) {
+        return { error: SLAVOMIR_APPROVAL_CONFIGURATION_ERROR } as const;
+      }
+      const dispatchStep = { ...step, ...configuredRecipient };
+      if (dispatchStep.recipientType === ProductionApprovalRecipientType.EXISTING_COLLABORATOR &&
+          (!dispatchStep.recipientUserId || !isProjectParticipant(project, dispatchStep.recipientUserId))) {
         return { error: "The selected approver is no longer a project participant." } as const;
       }
-      if (!normalizeEmail(step.recipientEmail)) return { error: "The approver email address is invalid." } as const;
+      if (!normalizeEmail(dispatchStep.recipientEmail ?? "")) return { error: "The approver email address is invalid." } as const;
       await tx.productionApprovalStep.update({
         where: { id: step.id },
-        data: { requestedById: user.id },
+        data: { requestedById: user.id, ...configuredRecipient },
       });
-      const activation = await activateNextStep(tx, step, project);
+      const activation = await activateNextStep(tx, dispatchStep, project);
       if ("error" in activation) throw new StageSixWorkflowError(activation.error);
       await tx.projectProductionUnit.update({
         where: { id: unit.id },
@@ -1902,6 +1926,15 @@ export async function retryProductionApprovalDispatch(
 ) {
   const project = await getStageSixManagerProject(user, input.projectId);
   if (!project) return { error: "You do not have permission to manage Stage 6." } as const;
+  const step = await withPrismaRetry(() => prisma.productionApprovalStep.findFirst({
+    where: { id: input.stepId, productionUnit: { projectId: input.projectId }, removedAt: null },
+    select: { isMarketingDirectorRequired: true },
+  }));
+  if (!step) return { error: "This approval email cannot be retried." } as const;
+  const configuredRecipient = step.isMarketingDirectorRequired ? getSlavomirApprovalRecipient() : null;
+  if (step.isMarketingDirectorRequired && !configuredRecipient) {
+    return { error: SLAVOMIR_APPROVAL_CONFIGURATION_ERROR } as const;
+  }
   const access = createProductionApprovalToken();
   const updated = await withPrismaRetry(() =>
     prisma.productionApprovalStep.updateMany({
@@ -1925,6 +1958,7 @@ export async function retryProductionApprovalDispatch(
         recipientType: ProductionApprovalRecipientType.EXTERNAL_EMAIL,
       },
       data: {
+        ...configuredRecipient,
         dispatchStatus: ProductionDispatchStatus.PENDING,
         externalTokenHash: access.tokenHash,
         externalTokenCreatedAt: access.createdAt,

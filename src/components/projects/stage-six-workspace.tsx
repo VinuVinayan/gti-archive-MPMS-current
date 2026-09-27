@@ -385,6 +385,7 @@ function ApproverDialog({
   projectId,
   unit,
   participants,
+  marketingDirectorRecipient,
   onClose,
   onSaved,
 }: {
@@ -392,6 +393,7 @@ function ApproverDialog({
   projectId: string;
   unit: StageSixUnitRecord;
   participants: StageSixWorkspaceData["participants"];
+  marketingDirectorRecipient: StageSixWorkspaceData["marketingDirectorRecipient"];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -430,7 +432,9 @@ function ApproverDialog({
     },
   });
   const allSelected = fieldKeys.length === STAGE_FIVE_FIELD_DEFINITIONS.length && fileIds.length === availableFiles.length;
-  const recipientReady = recipientType === ProductionApprovalRecipientType.EXISTING_COLLABORATOR
+  const recipientReady = mode === "marketing-director"
+    ? Boolean(marketingDirectorRecipient.email)
+    : recipientType === ProductionApprovalRecipientType.EXISTING_COLLABORATOR
     ? Boolean(recipientUserId)
     : /^\S+@\S+\.\S+$/.test(recipientEmail.trim());
   const canSubmit =
@@ -488,36 +492,47 @@ function ApproverDialog({
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6 sm:py-5">
-            <fieldset>
-              <legend className="text-[12px] font-[720] text-[#2d372f]">Recipient Type</legend>
-              <div className="mt-2 flex flex-wrap gap-3">
-                {[
-                  [ProductionApprovalRecipientType.EXISTING_COLLABORATOR, "Project Participant"],
-                  [ProductionApprovalRecipientType.EXTERNAL_EMAIL, "External Email"],
-                ].map(([value, label]) => (
-                  <label key={value} className="flex items-center gap-2 rounded-[11px] border border-[#dfe6df] bg-white px-3 py-2 text-[11px] font-[650] text-[#455149]">
-                    <input type="radio" checked={recipientType === value} onChange={() => setRecipientType(value as ProductionApprovalRecipientType)} /> {label}
-                  </label>
-                ))}
+            {mode === "marketing-director" ? (
+              <div className="rounded-[14px] border border-[#dfe6df] bg-[#f7faf7] p-4">
+                <p className="text-[12px] font-[720] text-[#27322b]">{marketingDirectorRecipient.name}</p>
+                <p className="mt-1 break-words text-[11px] text-[#66736a]">
+                  {marketingDirectorRecipient.email || "Approval email is not configured. Contact an administrator."}
+                </p>
               </div>
-            </fieldset>
-
-            {recipientType === ProductionApprovalRecipientType.EXISTING_COLLABORATOR ? (
-              <Select value={recipientUserId} onValueChange={setRecipientUserId}>
-                <SelectTrigger className="mt-3 h-11 w-full rounded-[12px] border-[#dfe6df] bg-white" aria-label="Select project collaborator"><SelectValue placeholder="Search/select project collaborator" /></SelectTrigger>
-                <SelectContent className="z-[190]">{participants.map((participant) => <SelectItem key={participant.id} value={participant.id}>{participant.name} — {participant.role}</SelectItem>)}</SelectContent>
-              </Select>
             ) : (
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <label className="space-y-1.5">
-                  <span className="text-[11px] font-[700] text-[#3f4b43]">Name</span>
-                  <Input value={recipientName} placeholder="Enter recipient name" className="rounded-[12px] border-[#c8d5cb] bg-[#fbfdfb] shadow-none focus-visible:border-[#46906a] focus-visible:ring-[#46906a]/15" onChange={(event) => setRecipientName(event.target.value)} />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="text-[11px] font-[700] text-[#3f4b43]">Email</span>
-                  <Input type="email" value={recipientEmail} placeholder="name@example.com" className="rounded-[12px] border-[#c8d5cb] bg-[#fbfdfb] shadow-none focus-visible:border-[#46906a] focus-visible:ring-[#46906a]/15" onChange={(event) => setRecipientEmail(event.target.value)} />
-                </label>
-              </div>
+              <>
+                <fieldset>
+                  <legend className="text-[12px] font-[720] text-[#2d372f]">Recipient Type</legend>
+                  <div className="mt-2 flex flex-wrap gap-3">
+                    {[
+                      [ProductionApprovalRecipientType.EXISTING_COLLABORATOR, "Project Participant"],
+                      [ProductionApprovalRecipientType.EXTERNAL_EMAIL, "External Email"],
+                    ].map(([value, label]) => (
+                      <label key={value} className="flex items-center gap-2 rounded-[11px] border border-[#dfe6df] bg-white px-3 py-2 text-[11px] font-[650] text-[#455149]">
+                        <input type="radio" checked={recipientType === value} onChange={() => setRecipientType(value as ProductionApprovalRecipientType)} /> {label}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+
+                {recipientType === ProductionApprovalRecipientType.EXISTING_COLLABORATOR ? (
+                  <Select value={recipientUserId} onValueChange={setRecipientUserId}>
+                    <SelectTrigger className="mt-3 h-11 w-full rounded-[12px] border-[#dfe6df] bg-white" aria-label="Select project collaborator"><SelectValue placeholder="Search/select project collaborator" /></SelectTrigger>
+                    <SelectContent className="z-[190]">{participants.map((participant) => <SelectItem key={participant.id} value={participant.id}>{participant.name} — {participant.role}</SelectItem>)}</SelectContent>
+                  </Select>
+                ) : (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <label className="space-y-1.5">
+                      <span className="text-[11px] font-[700] text-[#3f4b43]">Name</span>
+                      <Input value={recipientName} placeholder="Enter recipient name" className="rounded-[12px] border-[#c8d5cb] bg-[#fbfdfb] shadow-none focus-visible:border-[#46906a] focus-visible:ring-[#46906a]/15" onChange={(event) => setRecipientName(event.target.value)} />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-[11px] font-[700] text-[#3f4b43]">Email</span>
+                      <Input type="email" value={recipientEmail} placeholder="name@example.com" className="rounded-[12px] border-[#c8d5cb] bg-[#fbfdfb] shadow-none focus-visible:border-[#46906a] focus-visible:ring-[#46906a]/15" onChange={(event) => setRecipientEmail(event.target.value)} />
+                    </label>
+                  </div>
+                )}
+              </>
             )}
 
             <div className="mt-5 flex items-center justify-between gap-3">
@@ -716,7 +731,7 @@ function ApprovalSection({
             <span className="grid size-9 place-items-center rounded-[10px] border border-[#dfe6df] bg-[#f8faf8] text-[12px] font-[740]">{index + 1}</span>
             <div className="min-w-0">
               <p className="min-w-0 whitespace-normal break-words text-[12px] font-[720] text-[#27322b]">{step.isMarketingDirectorRequired ? "Marketing Director" : step.recipientName}</p>
-              <p className="mt-1 min-w-0 whitespace-normal break-words text-[10px] text-[#77827a]">{step.recipientType ? `${step.recipientName}${step.recipientEmail ? ` · ${step.recipientEmail}` : ""}` : "Recipient not assigned"}</p>
+              <p className="mt-1 min-w-0 whitespace-normal break-words text-[10px] text-[#77827a]">{step.recipientType || step.isMarketingDirectorRequired ? `${step.recipientName}${step.recipientEmail ? ` · ${step.recipientEmail}` : ""}` : "Recipient not assigned"}</p>
               {step.failureMessage ? <p className="mt-1 text-[10px] text-[#a54b43]">{step.failureMessage}</p> : null}
               {step.decisionComment ? <p className="mt-1 text-[10px] italic text-[#657168]">“{step.decisionComment}”</p> : null}
             </div>
@@ -1682,7 +1697,7 @@ export function StageSixWorkspace({
         </div>
       </CardContent></Card>
 
-      {activeUnit && approverDialog ? <ApproverDialog mode={approverDialog} projectId={project.id} unit={activeUnit} participants={pageData.participants} onClose={() => setApproverDialog(null)} onSaved={refresh} /> : null}
+      {activeUnit && approverDialog ? <ApproverDialog mode={approverDialog} projectId={project.id} unit={activeUnit} participants={pageData.participants} marketingDirectorRecipient={pageData.marketingDirectorRecipient} onClose={() => setApproverDialog(null)} onSaved={refresh} /> : null}
       {activeUnit && handoverDialog ? <HandoverDialog projectId={project.id} unit={activeUnit} recipients={pageData.handoverRecipients} onClose={() => setHandoverDialog(false)} onSaved={refresh} /> : null}
       {archivePreparation ? (
         <StageSixArchiveDialog
