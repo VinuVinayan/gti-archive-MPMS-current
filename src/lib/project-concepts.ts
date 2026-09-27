@@ -37,7 +37,7 @@ import { isAllowedStageSubmissionFile } from "@/lib/upload-validation";
 import { hasStageFiveDownstreamActivityForAttachment } from "@/lib/stage-five";
 import { deleteObjectIfNeeded } from "@/lib/storage/s3";
 import { isProjectStatusCompleted } from "@/lib/project-statuses";
-import { getStageSkipRevocationEligibility } from "@/lib/project-stage-skip-revocation";
+import { getStageSkipRevocationEligibility, getTaskCompletionRevocationEligibility, type TaskCompletionRevocationEligibility } from "@/lib/project-stage-skip-revocation";
 
 export type ProjectConceptAttachmentReference = {
   id: string;
@@ -140,6 +140,7 @@ export type ProjectConceptChatMode = {
   participantUserIds: string[];
   approvedAttachmentId: string | null;
   completedWithoutFile: boolean;
+  completionRevocationEligibility: TaskCompletionRevocationEligibility | null;
   canCompleteWithoutFile: boolean;
   completionRequest: ConceptCompletionRequest | null;
   canRequestCompletion: boolean;
@@ -3474,6 +3475,8 @@ export async function getProjectConceptChatContext(
       participantUserIds: getProjectConceptParticipantUserIds(accessContext),
       approvedAttachmentId: record.approvedAttachmentId,
       completedWithoutFile: isConceptCompletedWithoutFile(record),
+      completionRevocationEligibility: isConceptCompletedWithoutFile(record)
+        ? await getTaskCompletionRevocationEligibility(user, input) : null,
       canCompleteWithoutFile: canCompleteConceptWithoutFile(user, record.project, record, input.stageKey),
       completionRequest: mapCompletionRequest(record),
       canRequestCompletion: canRequestConceptCompletion(user, record.project, record, input.stageKey),

@@ -141,6 +141,7 @@ import { showErrorToast, showSuccessToast } from "@/lib/toast";
 import type { StageHistoryRecord } from "@/lib/project-history";
 import { RequestConceptCompletionButton } from "@/components/projects/request-concept-completion-button";
 import { CompleteConceptTaskButton } from "@/components/projects/complete-concept-task-button";
+import { RevokeTaskCompletionButton } from "@/components/projects/revoke-task-completion-button";
 import type { ProjectConceptChatMode } from "@/lib/project-concepts";
 import type {
   StageChatRealtimeMessageCreatedPayload,
@@ -7864,6 +7865,13 @@ export function ProjectChatWorkspace({
               ))}
             </dl>
             {conceptMode.completedWithoutFile ? <span className="rounded-full bg-[#e7f5eb] px-3 py-1.5 text-[11px] font-semibold text-[#247247]">Completed · No file</span> : null}
+            <RevokeTaskCompletionButton projectId={project.id} folderId={conceptMode.folderId} stageKey={conceptMode.workflowStageKey}
+              name={conceptMode.conceptName} eligibility={conceptMode.completionRevocationEligibility}
+              onReopened={() => setStageCardOverrides((current) => {
+                const next = { ...current };
+                if (activeStage) delete next[activeStage.id];
+                return next;
+              })} />
             {conceptMode.canCompleteWithoutFile && activeStage && !isStageCompleted ? (
               <CompleteConceptTaskButton projectId={project.id} folderId={conceptMode.folderId} stageKey={conceptMode.workflowStageKey} name={conceptMode.conceptName} completionRequest={conceptMode.completionRequest} onCompleted={() => setStageCardOverrides((current) => ({
                 ...current, [activeStage.id]: { ...current[activeStage.id], actualStartedAt: activeStage.actualStartedAt, actualStartedAtValue: activeStage.actualStartedAtValue, status: "completed" },

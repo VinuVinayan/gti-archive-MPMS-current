@@ -30,7 +30,29 @@ import {
 } from "@/lib/project-concepts";
 import { PROJECTS_CACHE_TAG } from "@/lib/projects";
 import { publishProjectActivityUpdatedAfterResponse } from "@/lib/realtime/server";
-import { revokeSkippedConceptStage } from "@/lib/project-stage-skip-revocation";
+import { revokeSkippedConceptStage, revokeConceptTaskCompletion } from "@/lib/project-stage-skip-revocation";
+
+export async function revokeConceptTaskCompletionAction(input: {
+  projectId: string; folderId: string; stageKey: ConceptWorkflowStageKey; executorId?: string;
+}) {
+  const user = await requireUser();
+  try {
+    const result = await revokeConceptTaskCompletion(user, input);
+    if ("changed" in result) {
+      revalidatePath(`/projects/${input.projectId}`, "layout");
+      revalidatePath("/tasks");
+      revalidateTag(PROJECTS_CACHE_TAG, "max");
+      publishProjectActivityUpdatedAfterResponse({
+        projectId: input.projectId, stageId: result.taskerStageId,
+        eventType: "stage_status_changed", changedEntityId: result.taskerStageId, actorId: user.id,
+      });
+    }
+    return result;
+  } catch (error) {
+    console.error("[project-concepts] revoke task completion failed", error);
+    return { error: "Unable to revoke completion right now. Refresh and try again." } as const;
+  }
+}
 
 export async function revokeSkippedConceptStageAction(input: {
   projectId: string;

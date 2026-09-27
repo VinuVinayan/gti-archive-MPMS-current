@@ -93,6 +93,21 @@ entries automatically created by skipping Stage 4 can be reset; the original
 Stage 3 files and approvals remain intact. The server checks these conditions
 again when confirming and records the action in the project activity log.
 
+## Revoking task completion without a file
+
+For Stage 3 and Stage 4 tasks marked **Completed · No file**, the project owner
+or an administrator can choose **Revoke Completion** in the task header. This
+reopens the task for discussion and submissions. Executor acceptance and existing
+files are preserved. If the task has no valid executor, the confirmation requires
+choosing a current project executor, who must then accept the brief.
+
+If the workflow stage is already completed, reopening also relocks later stages.
+The same downstream safety checks as **Undo Skip** apply. Untouched generated
+Stage 5 checklists may be rebuilt; original files and sibling task approvals stay
+intact. Blocked actions display the reason. The task discussion records who
+revoked completion, and the server rechecks permissions and dependencies when
+confirming. Task-only reopening leaves the current workflow stage open.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
