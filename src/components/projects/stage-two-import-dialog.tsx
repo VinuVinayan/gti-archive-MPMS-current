@@ -1,5 +1,7 @@
 "use client";
 
+import { FileThumbnail } from "@/components/projects/file-thumbnail";
+
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FileDown, FileText, Loader2, X } from "lucide-react";
@@ -131,7 +133,7 @@ export function StageTwoImportDialog({ projectId, folders, initialFolderId, onCl
                   {group.map((item) => <div key={item.id} className="rounded-[13px] border border-[#dfe6df] p-3">
                     <label className="flex cursor-pointer items-start gap-3">
                       <input type="checkbox" checked={selected.has(item.id)} disabled={pending || item.alreadyImported || (selected.size >= 100 && !selected.has(item.id))} onChange={(event) => setSelected((current) => { const next = new Set(current); if (event.target.checked) next.add(item.id); else next.delete(item.id); return next; })} className="mt-1 size-4 shrink-0 accent-[#24764e]" />
-                      {kind === "text" ? <FileText className="mt-0.5 h-5 w-5 shrink-0 text-[#508364]" /> : <FileDown className="mt-0.5 h-5 w-5 shrink-0 text-[#508364]" />}
+                      {kind === "text" ? <FileText className="mt-0.5 h-5 w-5 shrink-0 text-[#508364]" /> : <FileThumbnail fileName={item.fileName} mimeType={item.mimeType} previewPath={item.previewPath} className="h-10 w-12" />}
                       <span className="min-w-0 flex-1">
                         <span className="block break-words text-[14px] font-[650] text-[#263129]">{item.title}</span>
                         <span className="mt-0.5 block text-[11px] text-[#758078]">{item.section} · {kind === "text" ? ".txt file" : item.mimeType} · {item.size < 1024 ? `${item.size} B` : `${Math.ceil(item.size / 1024)} KB`}</span>

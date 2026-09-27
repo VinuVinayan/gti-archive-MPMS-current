@@ -1,8 +1,10 @@
 "use client";
 
+import { FileThumbnail } from "@/components/projects/file-thumbnail";
+
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Check, Download, FileImage, Loader2, Plus, Send, X } from "lucide-react";
+import { Check, Download, Loader2, Plus, Send, X } from "lucide-react";
 
 import { AssetPreviewButton } from "@/components/projects/asset-preview-button";
 import {
@@ -246,7 +248,7 @@ export function StageFiveExternalRequestWorkspace({
           <div className="min-w-0">
             <p className="text-[10px] font-[760] uppercase tracking-[0.09em] text-[#7a867e]">Project file</p>
             <div className="mt-1.5 flex min-w-0 items-center gap-2">
-              <FileImage className="h-4 w-4 shrink-0 text-[#438060]" />
+              <FileThumbnail fileName={data.file.name} mimeType={data.file.mimeType} previewPath={`${sourceBasePath}/preview`} />
               <p className="truncate text-[14px] font-[700] text-[#28342c]">{data.file.name}</p>
             </div>
           </div>

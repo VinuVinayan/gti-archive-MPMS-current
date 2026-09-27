@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { FileThumbnail } from "@/components/projects/file-thumbnail";
 import Link from "next/link";
 import {
   type DragEvent,
@@ -252,16 +252,14 @@ function FileVisual({
 
   if (kind === "image") {
     return (
-      <span className="relative block h-full w-full overflow-hidden bg-[#edf2ee]">
-        <Image
-          src={previewHref}
-          alt=""
-          fill
-          unoptimized
-          sizes="(max-width: 640px) 80vw, (max-width: 1200px) 33vw, 240px"
-          className="object-cover transition duration-300 group-hover:scale-[1.02]"
-        />
-      </span>
+      <FileThumbnail
+        fileName={file.name}
+        mimeType={file.mimeType}
+        previewPath={previewHref}
+        className="h-full w-full rounded-none border-0 bg-[#edf2ee]"
+        imageClassName="object-cover transition duration-300 group-hover:scale-[1.02]"
+        fallback={<FileKindIcon file={file} className="h-12 w-12" />}
+      />
     );
   }
 
@@ -927,7 +925,7 @@ export function StageTwoFolderWorkspace({
     ) : (
       <div key={file.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_44px] items-center gap-3 border-b border-[#edf1ee] px-4 py-3.5 last:border-0 md:grid-cols-[minmax(0,1fr)_120px_160px_110px_52px] md:gap-4">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-[#edf5ef] text-[#397655]"><FileKindIcon file={file} /></span>
+          <FileThumbnail fileName={file.name} mimeType={file.mimeType} previewPath={`/api/project-assets/${file.attachmentId}/preview`} className="size-9 rounded-[10px]" fallback={<FileKindIcon file={file} />} />
           {file.pinnedAt ? <Pin className="size-3.5 shrink-0 text-[#24764e]" aria-label="Pinned" /> : null}
           <div className="min-w-0">
             {isBrowserPreviewable(file) ? (

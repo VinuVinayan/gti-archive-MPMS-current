@@ -7,6 +7,7 @@ import { Download, Eye, FileText, ImageIcon, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { FileThumbnail, canShowImageThumbnail } from "@/components/projects/file-thumbnail";
 import { cn } from "@/lib/utils";
 
 type AssetPreviewButtonProps = {
@@ -44,7 +45,7 @@ function isPreviewableAsset(
   mimeType: string,
   textContentPath?: string | null,
 ) {
-  if (mimeType.startsWith("image/")) {
+  if (canShowImageThumbnail(fileName, mimeType)) {
     return true;
   }
 
@@ -235,7 +236,7 @@ export function AssetPreviewDialog({
                   </article>
                 )}
               </div>
-            ) : mimeType.startsWith("image/") ? (
+            ) : canShowImageThumbnail(fileName, mimeType) ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={previewPath}
@@ -314,25 +315,12 @@ export function AssetImageThumbnail({
   interactive = true,
 }: AssetImageThumbnailProps) {
   const [open, setOpen] = useState(false);
-  const [failedThumbnailPath, setFailedThumbnailPath] = useState<string>();
-
-  if (
-    !mimeType.startsWith("image/") ||
-    failedThumbnailPath === previewPath
-  ) {
-    return null;
-  }
-
   const thumbnailImage = (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={previewPath}
-      alt=""
-      aria-hidden="true"
-      loading="lazy"
-      decoding="async"
-      onError={() => setFailedThumbnailPath(previewPath)}
-      className="h-full w-full object-contain"
+    <FileThumbnail
+      fileName={fileName}
+      mimeType={mimeType}
+      previewPath={previewPath}
+      className="h-full w-full rounded-none border-0 bg-transparent"
     />
   );
   const thumbnailClassName = cn(
@@ -342,7 +330,7 @@ export function AssetImageThumbnail({
     className,
   );
 
-  if (!interactive) {
+  if (!interactive || !canShowImageThumbnail(fileName, mimeType) || !previewPath) {
     return <div className={thumbnailClassName}>{thumbnailImage}</div>;
   }
 

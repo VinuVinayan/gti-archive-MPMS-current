@@ -1,5 +1,7 @@
 "use client";
 
+import { FileThumbnail } from "@/components/projects/file-thumbnail";
+
 import Link from "next/link";
 import {
   useCallback,
@@ -738,7 +740,12 @@ function AttachmentTextarea({
               key={attachment.id}
               className="inline-flex max-w-full items-center gap-2 rounded-[10px] border border-[#dfe6df] bg-[#f7f9f7] px-2.5 py-1.5 text-[11px] text-[#465149]"
             >
-              <FileText className="h-3.5 w-3.5 shrink-0 text-[#377253]" />
+              <FileThumbnail
+                fileName={attachment.originalFileName}
+                mimeType={attachment.mimeType}
+                previewPath={`/api/project-assets/${attachment.id}/preview`}
+                className="h-8 w-10"
+              />
               <span className="max-w-[220px] truncate">{attachment.originalFileName}</span>
               <span className="text-[#8b948d]">{formatBytes(attachment.fileSize)}</span>
               {!disabled ? (

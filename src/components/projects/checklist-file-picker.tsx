@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef } from "react";
-import { AlertCircle, FileImage, LoaderCircle, RotateCcw, Upload, X } from "lucide-react";
+import { AlertCircle, LoaderCircle, RotateCcw, Upload, X } from "lucide-react";
+import { FileThumbnail } from "@/components/projects/file-thumbnail";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -87,7 +88,13 @@ export function ChecklistFilePicker({
             ) : file.uploadState === "failed" ? (
               <AlertCircle className="h-3.5 w-3.5 shrink-0 text-[#b5473b]" />
             ) : (
-              <FileImage className="h-3.5 w-3.5 shrink-0 text-[#438060]" />
+              <FileThumbnail
+                fileName={file.name}
+                mimeType={file.mimeType}
+                file={file.file}
+                previewPath={file.attachmentId ? `/api/project-assets/${file.attachmentId}/preview` : undefined}
+                className="h-8 w-10"
+              />
             )}
             <span className="max-w-[220px] truncate font-[650]">{file.name}</span>
             <span className="shrink-0 text-[#7c867f]">

@@ -1,5 +1,7 @@
 "use client";
 
+import { FileThumbnail } from "@/components/projects/file-thumbnail";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -196,9 +198,12 @@ function UnitSwitcher({
                 : "border-[#dfe6df] hover:border-[#b9cbbd]",
             )}
           >
-            <span className="grid size-11 shrink-0 place-items-center rounded-[12px] bg-[#edf5ef] text-[#347455]">
-              <FileIcon file={unit.sourceFile} />
-            </span>
+            <FileThumbnail
+              fileName={unit.sourceFile.name}
+              mimeType={unit.sourceFile.mimeType}
+              previewPath={`/api/project-assets/${unit.sourceFile.id}/preview`}
+              className="size-11 rounded-[12px]"
+            />
             <span className="min-w-0">
               <strong className="block truncate text-[12px] font-[720] text-[#27322b]">{unit.name}</strong>
               <span className={cn("mt-1 inline-flex rounded-full px-2 py-0.5 text-[9px] font-[740]", unitStatusClass(unit.status))}>
@@ -1279,13 +1284,12 @@ function StageSixArchiveDialog({
                   className="group grid overflow-hidden rounded-[20px] border border-[#dfe6df] bg-white shadow-[0_8px_24px_rgba(25,45,31,.035)] transition hover:border-[#cadbce] hover:shadow-[0_14px_34px_rgba(25,45,31,.07)] lg:grid-cols-[minmax(0,1fr)_minmax(320px,.82fr)]"
                 >
                   <div className="flex min-w-0 gap-3 p-4 sm:p-5">
-                    <span className="grid size-12 shrink-0 place-items-center rounded-[15px] border border-[#dce9df] bg-[linear-gradient(145deg,#f3faf5,#e7f3ea)] text-[#2b7650]">
-                      {file.mimeType.startsWith("image/") ? (
-                        <FileImage className="h-5 w-5" />
-                      ) : (
-                        <FileText className="h-5 w-5" />
-                      )}
-                    </span>
+                    <FileThumbnail
+                      fileName={file.originalFileName}
+                      mimeType={file.mimeType}
+                      previewPath={file.previewPath}
+                      className="size-12 rounded-[15px]"
+                    />
                     <div className="min-w-0 pt-0.5">
                       <p
                         className="truncate text-[13px] font-[780] text-[#1b271f]"

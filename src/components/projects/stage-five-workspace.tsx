@@ -1,6 +1,7 @@
 "use client";
 
-import NextImage from "next/image";
+import { FileThumbnail } from "@/components/projects/file-thumbnail";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
@@ -17,7 +18,6 @@ import {
   Box,
   Check,
   FileCheck2,
-  FileImage,
   FileOutput,
   FileText,
   Hash,
@@ -44,7 +44,6 @@ import {
 
 import { ProjectAccessRealtimeGuard } from "@/components/projects/project-access-realtime-guard";
 import {
-  AssetImageThumbnail,
   AssetPreviewButton,
 } from "@/components/projects/asset-preview-button";
 import {
@@ -439,11 +438,12 @@ function FileChecklistSwitcher({
                   : "border-[#dfe6df] hover:border-[#b9cbbd]",
               )}
             >
-              <span className="grid size-11 shrink-0 place-items-center rounded-[12px] bg-[#edf5ef] text-[#347455]" aria-hidden="true">
-                {file.sourceAttachment.mimeType.startsWith("image/")
-                  ? <FileImage className="h-5 w-5" />
-                  : <FileText className="h-5 w-5" />}
-              </span>
+              <FileThumbnail
+                fileName={file.sourceAttachment.name}
+                mimeType={file.sourceAttachment.mimeType}
+                previewPath={`/api/project-assets/${file.sourceAttachment.id}/preview`}
+                className="size-11 rounded-[12px]"
+              />
               <span className="min-w-0 flex-1">
                 <strong className="block truncate text-[12px] font-[720] text-[#27322b]">
                   {file.sourceAttachment.name}
@@ -776,17 +776,13 @@ function StageFiveReadOnlyView({
                         key={file.id}
                         className="inline-flex max-w-full items-center gap-2 rounded-[10px] border border-[#dfe6df] bg-[#f7faf7] px-3 py-2 text-[11px]"
                       >
-                        {file.attachmentId && file.mimeType.startsWith("image/") ? (
-                          <AssetImageThumbnail
-                            fileName={file.name}
-                            mimeType={file.mimeType}
-                            previewPath={`/api/project-assets/${file.attachmentId}/preview`}
-                            downloadPath={`/api/project-assets/${file.attachmentId}/download`}
-                            className="h-8 w-10"
-                          />
-                        ) : (
-                          <FileImage className="h-3.5 w-3.5 shrink-0 text-[#438060]" />
-                        )}
+                        <FileThumbnail
+                          fileName={file.name}
+                          mimeType={file.mimeType}
+                          file={file.file}
+                          previewPath={file.attachmentId ? `/api/project-assets/${file.attachmentId}/preview` : undefined}
+                          className="h-8 w-10"
+                        />
                         <span className="max-w-[320px] truncate font-[650]">{file.name}</span>
                         <span className="shrink-0 text-[#7c867f]">{formatFileSize(file.size)}</span>
                         {file.attachmentId ? (
@@ -2027,18 +2023,12 @@ export function StageFiveWorkspace({
                       aria-label={`Preview ${activeFile.sourceAttachment.name}`}
                       className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-[12px] border border-[#d9e2da] bg-white text-[#438060] shadow-[0_6px_16px_rgba(28,50,35,0.07)]"
                     >
-                      {activeFile.sourceAttachment.mimeType.startsWith("image/") ? (
-                        <NextImage
-                          src={`/api/project-assets/${activeFile.sourceAttachment.id}/preview`}
-                          alt={`Preview of ${activeFile.sourceAttachment.name}`}
-                          width={64}
-                          height={64}
-                          unoptimized
-                          className="size-full object-contain"
-                        />
-                      ) : (
-                        <FileText className="h-5 w-5" />
-                      )}
+                      <FileThumbnail
+                        fileName={activeFile.sourceAttachment.name}
+                        mimeType={activeFile.sourceAttachment.mimeType}
+                        previewPath={`/api/project-assets/${activeFile.sourceAttachment.id}/preview`}
+                        className="size-full rounded-none border-0 bg-transparent"
+                      />
                     </a>
                     <div className="min-w-0">
                       <p className="truncate text-[13px] font-[700] text-[#27322b]" title={activeFile.sourceAttachment.name}>

@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { FileText, Loader2, Paperclip, X } from "lucide-react";
+import { Loader2, Paperclip, X } from "lucide-react";
+import { FileThumbnail } from "@/components/projects/file-thumbnail";
 
 import { AppDatePicker } from "@/components/calendar/app-date-picker";
 import { FlexibleDialog } from "@/components/projects/flexible-dialog";
@@ -179,7 +180,7 @@ export function FlexibleMilestoneDialog({
                   const key = `${file.name}:${file.size}:${file.lastModified}`;
                   return (
                     <div key={key} className="flex items-center gap-3 rounded-[13px] border border-[#e1e7e1] bg-white px-3 py-2.5">
-                      <FileText className="size-4 text-[#287e53]" />
+                      <FileThumbnail fileName={file.name} mimeType={file.type} file={file} className="h-8 w-10" />
                       <span className="min-w-0 flex-1 truncate text-[12px] font-[650] text-[#344039]">{file.name}</span>
                       <span className="text-[10px] text-[#7b857e]">{formatBytes(file.size)}</span>
                       <button

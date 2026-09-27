@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
+const fileThumbnail = await readFile("src/components/projects/file-thumbnail.tsx", "utf8");
+
 const [
   workspace,
   chatRoute,
@@ -81,10 +83,10 @@ assert(
     workspace.includes("interactive={!canShowFileActions}") &&
     assetPreview.includes("export function AssetImageThumbnail") &&
     assetPreview.includes("interactive = true") &&
-    assetPreview.includes("if (!interactive)") &&
+    assetPreview.includes("if (!interactive ||") &&
     assetPreview.includes('aria-label={`Preview image ${fileName}`}') &&
-    assetPreview.includes('loading="lazy"') &&
-    assetPreview.includes('className="h-full w-full object-contain"'),
+    fileThumbnail.includes('loading="lazy"') &&
+    assetPreview.includes("<FileThumbnail") && fileThumbnail.includes("h-full w-full object-contain"),
   "Stage 3/4 chat image documents must keep an uncropped visual thumbnail without duplicating the dedicated preview action.",
 );
 assert(

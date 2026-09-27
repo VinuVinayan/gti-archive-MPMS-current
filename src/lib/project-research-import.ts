@@ -25,6 +25,7 @@ export type InquiryImportItem = {
   mimeType: string;
   size: number;
   text?: string;
+  previewPath?: string;
   alreadyImported: boolean;
 };
 type ImportSource = Omit<InquiryImportItem, "alreadyImported"> & {
@@ -62,6 +63,7 @@ async function getImportSources(projectId: string): Promise<ImportSource[]> {
     fileName: attachment.originalFileName,
     mimeType: attachment.mimeType,
     size: attachment.fileSize,
+    previewPath: `/api/project-assets/${attachment.id}/preview`,
     sourceBucket: attachment.bucket,
     sourceKey: attachment.storageKey,
   }));
@@ -131,6 +133,7 @@ export async function getProjectResearchImportOptions(user: ImportUser, input: I
   return sources.map((item): InquiryImportItem => ({
     id: item.id, kind: item.kind, title: item.title, section: item.section,
     fileName: item.fileName, mimeType: item.mimeType, size: item.size, text: item.text,
+    previewPath: item.previewPath,
     alreadyImported: existing.has(item.id),
   }));
 }

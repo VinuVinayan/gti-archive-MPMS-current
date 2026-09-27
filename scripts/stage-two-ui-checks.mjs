@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
+const fileThumbnail = await readFile("src/components/projects/file-thumbnail.tsx", "utf8");
+
 const [workspace, folderWorkspace, dashboardShell, privateFolderPage, sharedFolderPage, assetPreview, page, folderPage, actions, service, access, files, storage, uploadClient, textFile, migration, schema, overview, uploadRoute, completeRoute, deleteRoute, downloadRoute] = await Promise.all([
   readFile("src/components/projects/stage-two-workspace.tsx", "utf8"),
   readFile("src/components/projects/stage-two-folder-workspace.tsx", "utf8"),
@@ -155,7 +157,7 @@ assert(
   "Opened folders must default to Grid and persist the Grid/List preference locally.",
 );
 assert(
-  folderWorkspace.includes("<Image") &&
+  folderWorkspace.includes("<FileThumbnail") &&
     folderWorkspace.includes("/api/project-assets/${file.attachmentId}/preview") &&
     folderWorkspace.includes("visualStyles") &&
     folderWorkspace.includes("getExtension(file.name)"),
@@ -163,13 +165,13 @@ assert(
 );
 assert(
   assetPreview.includes("export function AssetImageThumbnail") &&
-    assetPreview.includes('mimeType.startsWith("image/")') &&
-    assetPreview.includes("src={previewPath}") &&
-    assetPreview.includes('loading="lazy"') &&
+    fileThumbnail.includes('mimeType.startsWith("image/")') &&
+    fileThumbnail.includes("src={source}") &&
+    fileThumbnail.includes('loading="lazy"') &&
     assetPreview.includes('aria-label={`Preview image ${fileName}`}') &&
     assetPreview.includes("onClick={() => setOpen(true)}") &&
     assetPreview.includes("h-10 w-14 shrink-0 overflow-hidden") &&
-    assetPreview.includes('className="h-full w-full object-contain"'),
+    assetPreview.includes("<FileThumbnail") && fileThumbnail.includes("h-full w-full object-contain"),
   "The shared project preview control must provide a small, uncropped, clickable image thumbnail for document visual areas.",
 );
 assert(

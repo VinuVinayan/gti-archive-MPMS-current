@@ -1,6 +1,6 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element */
+import { FileThumbnail } from "@/components/projects/file-thumbnail";
 
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
@@ -20,7 +20,6 @@ import {
   CheckCircle2,
   CircleDot,
   Download,
-  FileImage,
   FileStack,
   Info,
   Mail,
@@ -504,9 +503,7 @@ function ProductionUnitSwitcher({
           const selected = unit.id === selectedUnitId;
           return (
             <button key={unit.id} type="button" aria-pressed={selected} className={cn("flex min-w-[220px] items-center gap-3 rounded-[16px] border bg-white p-3 text-left shadow-[0_8px_22px_rgba(23,39,28,0.035)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4b9068]/40 lg:min-w-0", selected ? "border-[#70a383] bg-[#f3faf5] shadow-[0_12px_26px_rgba(42,112,73,0.09)]" : "border-[#dfe6df] hover:border-[#b7cbbd] hover:bg-[#fbfdfb]")} onClick={() => onSelect(unit.id)}>
-              <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-[12px] bg-[#edf5ef] text-[#347455]">
-                {unit.sourceMimeType.startsWith("image/") ? <img src={`/api/project-assets/${unit.sourceAttachmentId}/preview`} alt="" className="h-full w-full object-cover" /> : <FileImage className="h-5 w-5" />}
-              </span>
+              <FileThumbnail fileName={unit.rawFileName} mimeType={unit.sourceMimeType} previewPath={`/api/project-assets/${unit.sourceAttachmentId}/preview`} className="size-11 rounded-[12px]" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[12px] font-[740] text-[#253028]" title={unit.name}>{unit.name}</span>
                 {unit.rawFileName !== unit.name ? <span className="mt-0.5 block truncate text-[8px] text-[#8a948d]" title={unit.rawFileName}>{unit.rawFileName}</span> : null}
@@ -839,7 +836,7 @@ function SampleRequestDetails({
           </section>
         ) : null}
         <section><h3 className="text-[10px] font-[760] uppercase tracking-[0.075em] text-[#657168]">Request Note</h3><div className="mt-2 rounded-[11px] border border-[#e2e8e2] bg-[#fafcfa] px-3 py-2.5"><RichTextContent value={round.requestNote} fallback={<p className="text-[10px] leading-4 text-[#4c584f]">No request note was added.</p>} className="text-[10px] leading-4 text-[#4c584f]" /></div></section>
-        <section><h3 className="text-[10px] font-[760] uppercase tracking-[0.075em] text-[#657168]">Production Files / References</h3><div className="mt-2 grid gap-2">{round.referenceFiles.length ? round.referenceFiles.map((file) => <a key={file.id} href={file.downloadPath} className="flex min-w-0 items-center gap-3 rounded-[11px] border border-[#e0e7e0] bg-[#fafcfa] px-3 py-2.5 text-[10px] text-[#354139] hover:bg-[#f3f8f4]"><FileImage className="h-4 w-4 shrink-0 text-[#4b7e5d]" /><span className="min-w-0 flex-1 truncate font-[680]">{file.name}</span><Download className="h-3.5 w-3.5 shrink-0" /></a>) : <p className="text-[10px] text-[#8a948d]">No reference files are available for this legacy request.</p>}</div></section>
+        <section><h3 className="text-[10px] font-[760] uppercase tracking-[0.075em] text-[#657168]">Production Files / References</h3><div className="mt-2 grid gap-2">{round.referenceFiles.length ? round.referenceFiles.map((file) => <a key={file.id} href={file.downloadPath} className="flex min-w-0 items-center gap-3 rounded-[11px] border border-[#e0e7e0] bg-[#fafcfa] px-3 py-2.5 text-[10px] text-[#354139] hover:bg-[#f3f8f4]"><FileThumbnail fileName={file.name} mimeType={file.mimeType} previewPath={`/api/project-assets/${file.id}/preview`} className="h-8 w-10" /><span className="min-w-0 flex-1 truncate font-[680]">{file.name}</span><Download className="h-3.5 w-3.5 shrink-0" /></a>) : <p className="text-[10px] text-[#8a948d]">No reference files are available for this legacy request.</p>}</div></section>
       </div>
       <ConfirmationDialog isOpen={confirm === PhysicalSampleDecision.ACCEPTED} title="Accept this physical sample?" description={`This will mark ${unit.name} as accepted for Stage 7 and lock further sample requests.`} confirmLabel="Accept Sample" pending={pending} onConfirm={decide} onClose={() => setConfirm(null)} />
       <ConfirmationDialog isOpen={confirm === PhysicalSampleDecision.REJECTED} title="Reject this physical sample?" description="The rejection and review note will remain as permanent history. You may then request another physical sample." confirmLabel="Reject Sample" tone="destructive" pending={pending} onConfirm={decide} onClose={() => setConfirm(null)} />

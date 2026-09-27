@@ -1,5 +1,7 @@
 "use client";
 
+import { FileThumbnail, canShowImageThumbnail } from "@/components/projects/file-thumbnail";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -196,6 +198,7 @@ type UploadProgressState = "pending" | "uploading" | "uploaded" | "error";
 type OptimisticMessageStatus = "sending" | "uploading" | "failed";
 
 type DisplayAttachmentRecord = ProjectAttachmentRecord & {
+  localFile?: File;
   uploadState?: UploadProgressState;
   progress?: number;
   errorMessage?: string;
@@ -1902,7 +1905,7 @@ function AttachmentHistoryList({
             >
               <div className="flex min-w-0 items-start gap-3">
                 {!attachment.uploadState &&
-                attachment.mimeType.startsWith("image/") &&
+                canShowImageThumbnail(attachment.originalFileName, attachment.mimeType) &&
                 attachment.previewPath ? (
                   <AssetImageThumbnail
                     fileName={attachment.originalFileName}
@@ -1912,13 +1915,13 @@ function AttachmentHistoryList({
                     interactive={!canShowFileActions}
                   />
                 ) : (
-                  <div
-                    className={`grid h-8 w-8 shrink-0 place-items-center rounded-md text-[10px] font-semibold ${getFileBadgeClass(
-                      attachment.fileTypeLabel,
-                    )}`}
-                  >
-                    {attachment.fileTypeLabel}
-                  </div>
+                  <FileThumbnail
+                    fileName={attachment.originalFileName}
+                    mimeType={attachment.mimeType}
+                    file={attachment.localFile}
+                    previewPath={attachment.previewPath}
+                    fallback={<span className={`grid h-full w-full place-items-center text-[10px] font-semibold ${getFileBadgeClass(attachment.fileTypeLabel)}`}>{attachment.fileTypeLabel}</span>}
+                  />
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -2237,7 +2240,7 @@ function ProjectAssetCard({
     favoriteOverrides?.[attachment.id] ?? attachment.isFavoritedByCurrentUser;
 
   return (
-    <article className="group flex aspect-square min-h-[150px] min-w-0 flex-col overflow-hidden rounded-[18px] border border-[#dce6dd] bg-[#fbfcfa] p-3 shadow-[0_8px_20px_rgba(18,35,23,0.04)] transition duration-200 hover:-translate-y-0.5 hover:border-brand/35 hover:bg-white hover:shadow-[0_16px_34px_rgba(18,35,23,0.09)]">
+    <article className="group flex min-h-[190px] min-w-0 flex-col overflow-hidden rounded-[18px] border border-[#dce6dd] bg-[#fbfcfa] p-3 shadow-[0_8px_20px_rgba(18,35,23,0.04)] transition duration-200 hover:-translate-y-0.5 hover:border-brand/35 hover:bg-white hover:shadow-[0_16px_34px_rgba(18,35,23,0.09)]">
       <div className="min-w-0">
         <div
           className="flex min-w-0 items-baseline text-[12px] font-[800] leading-4 text-[#111712]"
@@ -2253,13 +2256,13 @@ function ProjectAssetCard({
 
       <div className="mt-3 min-w-0 space-y-1.5">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <span
-            className={`inline-flex h-6 max-w-full shrink-0 items-center justify-center rounded-md px-2 text-[9px] font-[800] uppercase leading-none ${getFileBadgeClass(
-              attachment.fileTypeLabel,
-            )}`}
-          >
-            {attachment.fileTypeLabel}
-          </span>
+          <FileThumbnail
+            fileName={attachment.originalFileName}
+            mimeType={attachment.mimeType}
+            file={attachment.localFile}
+            previewPath={attachment.previewPath}
+            fallback={<span className={`grid h-full w-full place-items-center text-[10px] font-semibold ${getFileBadgeClass(attachment.fileTypeLabel)}`}>{attachment.fileTypeLabel}</span>}
+          />
           <span className="truncate text-[10px] font-[600] leading-4 text-[#7a837b]">
             {attachment.fileSizeLabel}
           </span>
@@ -6445,6 +6448,7 @@ export function ProjectChatWorkspace({
       localCreatedAtMs,
       attachments: filesToUpload.map((pendingFile) => ({
         id: pendingFile.id,
+        localFile: pendingFile.file,
         assetType: pendingFile.assetType ?? "COMMENT_ATTACHMENT",
         isSubmission: pendingFile.assetType === "STAGE_SUBMISSION",
         originalFileName: pendingFile.file.name,
@@ -6966,6 +6970,7 @@ export function ProjectChatWorkspace({
         localCreatedAtMs,
         attachments: filesToUpload.map((pendingFile) => ({
           id: pendingFile.id,
+          localFile: pendingFile.file,
           assetType: "REVISION_ORIGINAL",
           isSubmission: false,
           originalFileName: pendingFile.file.name,
@@ -9431,6 +9436,7 @@ export function ProjectChatWorkspace({
                           Attachment
                         </span>
                       )}
+                      <FileThumbnail fileName={pendingFile.file.name} mimeType={pendingFile.file.type} file={pendingFile.file} className="h-8 w-10" />
                       <span className="max-w-[180px] truncate">{pendingFile.file.name}</span>
                       <button
                         type="button"
@@ -10583,13 +10589,12 @@ export function ProjectChatWorkspace({
                         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
                           <div className="space-y-2">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span
-                                className={`inline-flex h-8 min-w-8 items-center justify-center rounded-md px-2 text-[10px] font-semibold ${getFileBadgeClass(
-                                  file.fileTypeLabel,
-                                )}`}
-                              >
-                                {file.fileTypeLabel}
-                              </span>
+                              <FileThumbnail
+                                fileName={file.originalFileName}
+                                mimeType={file.mimeType}
+                                previewPath={file.previewPath}
+                                fallback={<span className={`grid h-full w-full place-items-center text-[10px] font-semibold ${getFileBadgeClass(file.fileTypeLabel)}`}>{file.fileTypeLabel}</span>}
+                              />
                               <p className="truncate text-[14px] font-semibold text-[#111712]">
                                 {file.originalFileName}
                               </p>
@@ -11031,6 +11036,7 @@ export function ProjectChatWorkspace({
                           key={pendingFile.id}
                           className="inline-flex items-center gap-2 rounded-full border border-[#d6dfd7] bg-white px-3 py-1.5 text-[11px] text-[#324138]"
                         >
+                          <FileThumbnail fileName={pendingFile.file.name} mimeType={pendingFile.file.type} file={pendingFile.file} className="h-8 w-10" />
                           <span className="max-w-[220px] truncate">{pendingFile.file.name}</span>
                           <button
                             type="button"
