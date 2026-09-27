@@ -51,10 +51,6 @@ import {
   STAGE_FIVE_SOURCE_WORKFLOW_STAGE_KEYS,
 } from "@/lib/stage-five-lineage";
 import {
-  STAGE_SIX_EMAIL_DELIVERY_ADDRESS,
-  STAGE_SIX_FIRST_APPROVER,
-} from "@/lib/stage-six-constants";
-import {
   createPresignedDownloadUrl,
   createPresignedPreviewUrl,
 } from "@/lib/storage/s3";
@@ -650,15 +646,9 @@ export async function getStageSixWorkspaceData(
           step.dispatchStatus === ProductionDispatchStatus.SENT
             ? `/production-approvals/${step.id}`
             : null,
-        recipientType: isUnconfiguredFirstApprover
-          ? ProductionApprovalRecipientType.EXTERNAL_EMAIL
-          : step.recipientType,
-        recipientName: isUnconfiguredFirstApprover
-          ? STAGE_SIX_FIRST_APPROVER.name
-          : step.recipientName?.trim() || "Not assigned",
-        recipientEmail: isUnconfiguredFirstApprover
-          ? STAGE_SIX_FIRST_APPROVER.email
-          : step.recipientEmail,
+        recipientType: isUnconfiguredFirstApprover ? null : step.recipientType,
+        recipientName: isUnconfiguredFirstApprover ? "Not assigned" : step.recipientName?.trim() || "Not assigned",
+        recipientEmail: isUnconfiguredFirstApprover ? null : step.recipientEmail,
         activatedAt: step.activatedAt?.toISOString() ?? null,
         sentAt: step.sentAt?.toISOString() ?? null,
         decidedAt: step.decidedAt?.toISOString() ?? null,
@@ -978,9 +968,6 @@ export async function completeStageFive(
                 productionUnitId: unit.id,
                 sequence: 1,
                 isMarketingDirectorRequired: true,
-                recipientType: ProductionApprovalRecipientType.EXTERNAL_EMAIL,
-                recipientName: STAGE_SIX_FIRST_APPROVER.name,
-                recipientEmail: STAGE_SIX_FIRST_APPROVER.email,
               },
               select: { isMarketingDirectorRequired: true },
             });
@@ -1168,7 +1155,7 @@ async function sendExternalApproval(
   let result: Awaited<ReturnType<EmailSender>>;
   try {
     result = await sendEmail({
-      to: STAGE_SIX_EMAIL_DELIVERY_ADDRESS,
+      to: step.recipientEmail,
       ...email,
       replyTo: step.requestedBy.email,
     });
@@ -1233,6 +1220,7 @@ export async function configureMarketingDirector(
   },
   options: { sendEmail?: EmailSender } = {},
 ) {
+  void options; // Saving an approver never dispatches a request.
   const validationError = validateApproverInput(input);
   if (validationError) return { error: validationError } as const;
   if (!input.selectedFileIds.length) {
@@ -1240,14 +1228,15 @@ export async function configureMarketingDirector(
   }
   const project = await getStageSixManagerProject(user, input.projectId);
   if (!project) return { error: "You do not have permission to manage Stage 6." } as const;
+  const recipient = await resolveRecipient(project, input);
+  if (!recipient.ok) return { error: recipient.error } as const;
   const recipientData = {
-    recipientType: ProductionApprovalRecipientType.EXTERNAL_EMAIL,
-    recipientUserId: null,
-    recipientName: STAGE_SIX_FIRST_APPROVER.name,
-    recipientEmail: STAGE_SIX_FIRST_APPROVER.email,
+    recipientType: recipient.recipientType,
+    recipientUserId: recipient.recipientUserId,
+    recipientName: recipient.recipientName,
+    recipientEmail: recipient.recipientEmail,
   };
   const message = sanitizeRichText(input.message) || null;
-  const access = createProductionApprovalToken();
   let prepared;
   try {
     prepared = await withPrismaRetry(() =>
@@ -1305,17 +1294,9 @@ export async function configureMarketingDirector(
             requestedById: user.id,
             sharedFieldKeys: input.sharedFieldKeys,
             selectedFileIds: input.selectedFileIds,
-            sharedSnapshot: snapshot.snapshot as unknown as Prisma.InputJsonValue,
             message,
-            status: ProductionApprovalStepStatus.ACTIVE,
-            dispatchStatus: access
-              ? ProductionDispatchStatus.PENDING
-              : ProductionDispatchStatus.SENT,
-            activatedAt: new Date(),
-            sentAt: access ? null : new Date(),
-            externalTokenHash: access?.tokenHash ?? null,
-            externalTokenCreatedAt: access?.createdAt ?? null,
-            externalTokenExpiresAt: access?.expiresAt ?? null,
+            status: ProductionApprovalStepStatus.WAITING,
+            dispatchStatus: ProductionDispatchStatus.NOT_SENT,
           },
         });
         if (updated.count !== 1) {
@@ -1323,7 +1304,7 @@ export async function configureMarketingDirector(
         }
         await tx.projectProductionUnit.update({
           where: { id: unit.id },
-          data: { status: ProjectProductionUnitStatus.APPROVAL_PENDING },
+          data: { status: ProjectProductionUnitStatus.PREPARATION },
         });
         const step = await tx.productionApprovalStep.findUniqueOrThrow({
           where: {
@@ -1353,14 +1334,7 @@ export async function configureMarketingDirector(
     }
     throw error;
   }
-  if ("error" in prepared || prepared.duplicate || !access) return prepared;
-  const dispatch = await sendExternalApproval(
-    { stepId: prepared.step.id, rawToken: access.token, tokenHash: access.tokenHash },
-    options.sendEmail ?? sendResendEmail,
-  );
-  return "error" in dispatch
-    ? ({ ...dispatch, step: prepared.step } as const)
-    : prepared;
+  return prepared;
 }
 
 export async function addProductionApprover(
@@ -1487,57 +1461,13 @@ export async function addProductionApprover(
             candidate.status === ProductionApprovalStepStatus.ACTIVE ||
             candidate.status === ProductionApprovalStepStatus.REJECTED,
         );
-        const hasUnstartedBootstrap =
-          unit.status === ProjectProductionUnitStatus.PREPARATION &&
-          liveBeforeAdd.some(
-            (candidate) =>
-              candidate.status === ProductionApprovalStepStatus.WAITING &&
-              candidate.isMarketingDirectorRequired &&
-              !candidate.clientRequestId,
-          );
-        if (hasExecutionBlocker || hasUnstartedBootstrap) {
-          return { step, duplicate: false, next: null } as const;
+        if (!hasExecutionBlocker) {
+          await tx.projectProductionUnit.update({
+            where: { id: unit.id },
+            data: { status: ProjectProductionUnitStatus.PREPARATION, approvedAt: null },
+          });
         }
-
-        const next = await tx.productionApprovalStep.findFirst({
-          where: {
-            productionUnitId: unit.id,
-            removedAt: null,
-            status: ProductionApprovalStepStatus.WAITING,
-          },
-          orderBy: [{ sequence: "asc" }, { id: "asc" }],
-          select: {
-            id: true,
-            productionUnitId: true,
-            recipientType: true,
-            recipientUserId: true,
-            recipientName: true,
-            sequence: true,
-            sharedFieldKeys: true,
-            selectedFileIds: true,
-          },
-        });
-        if (!next) return { step, duplicate: false, next: null } as const;
-        const activation = await activateNextStep(tx, next, unit.project);
-        if ("error" in activation) throw new StageSixWorkflowError(activation.error);
-        await tx.projectProductionUnit.update({
-          where: { id: unit.id },
-          data: {
-            status: ProjectProductionUnitStatus.APPROVAL_PENDING,
-            approvedAt: null,
-          },
-        });
-        return {
-          step,
-          duplicate: false,
-          next: activation.access
-            ? {
-                stepId: next.id,
-                rawToken: activation.access.token,
-                tokenHash: activation.access.tokenHash,
-              }
-            : null,
-        } as const;
+        return { step, duplicate: false } as const;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       ),
@@ -1564,14 +1494,7 @@ export async function addProductionApprover(
     }
     throw error;
   }
-  if ("error" in outcome || outcome.duplicate || !outcome.next) return outcome;
-  const dispatch = await sendExternalApproval(
-    outcome.next,
-    options.sendEmail ?? sendResendEmail,
-  );
-  return "error" in dispatch
-    ? ({ ...outcome, next: null, dispatchError: dispatch.error } as const)
-    : ({ ...outcome, next: null } as const);
+  return outcome;
 }
 
 export async function removeProductionApprover(
@@ -1703,30 +1626,6 @@ export async function removeProductionApprover(
         const next = remaining.find(
           (candidate) => candidate.status === ProductionApprovalStepStatus.WAITING,
         );
-        if (
-          next &&
-          (wasActive || step.status === ProductionApprovalStepStatus.REJECTED)
-        ) {
-          const activation = await activateNextStep(tx, next, unit.project);
-          if ("error" in activation) throw new StageSixWorkflowError(activation.error);
-          await tx.projectProductionUnit.update({
-            where: { id: unit.id },
-            data: {
-              status: ProjectProductionUnitStatus.APPROVAL_PENDING,
-              approvedAt: null,
-            },
-          });
-          return {
-            removed: true,
-            next: activation.access
-              ? {
-                  stepId: next.id,
-                  rawToken: activation.access.token,
-                  tokenHash: activation.access.tokenHash,
-                }
-              : null,
-          } as const;
-        }
         if (next) {
           await tx.projectProductionUnit.update({
             where: { id: unit.id },
@@ -1797,14 +1696,7 @@ export async function removeProductionApprover(
     }
     throw error;
   }
-  if ("error" in outcome || !outcome.next) return outcome;
-  const dispatch = await sendExternalApproval(
-    outcome.next,
-    options.sendEmail ?? sendResendEmail,
-  );
-  return "error" in dispatch
-    ? ({ removed: true, next: null, dispatchError: dispatch.error } as const)
-    : ({ removed: true, next: null } as const);
+  return outcome;
 }
 
 export async function reorderProductionApprover(
@@ -1908,6 +1800,99 @@ export async function reorderProductionApprover(
     }
     throw error;
   }
+}
+
+export async function sendProductionApprovalRequest(
+  user: PermissionUser,
+  input: { projectId: string; productionUnitId: string; stepId: string },
+  options: { sendEmail?: EmailSender } = {},
+  conflictRetryCount = 0,
+): Promise<{ sent: boolean; stepId: string } | { error: string }> {
+  const project = await getStageSixManagerProject(user, input.projectId);
+  if (!project) return { error: "You do not have permission to manage Stage 6." };
+  let prepared;
+  try {
+    prepared = await withPrismaRetry(() => prisma.$transaction(async (tx) => {
+      const unit = await tx.projectProductionUnit.findFirst({
+        where: {
+          id: input.productionUnitId,
+          projectId: input.projectId,
+          status: { in: [ProjectProductionUnitStatus.PREPARATION, ProjectProductionUnitStatus.APPROVAL_PENDING] },
+          project: {
+            completedAt: null,
+            archivedAt: null,
+            workflowStages: { some: {
+              stageKey: ProjectWorkflowStageKey.PRODUCTION_AND_HANDOVER,
+              status: ProjectWorkflowStageStatus.AVAILABLE,
+            } },
+          },
+        },
+        select: {
+          id: true,
+          approvalSteps: {
+            where: { removedAt: null },
+            orderBy: [{ sequence: "asc" }, { id: "asc" }],
+            select: {
+              id: true, productionUnitId: true, sequence: true, status: true,
+              dispatchStatus: true, clientRequestId: true,
+              recipientType: true, recipientUserId: true, recipientName: true, recipientEmail: true,
+              sharedFieldKeys: true, selectedFileIds: true,
+            },
+          },
+        },
+      });
+      if (!unit) return { error: "This approval request is locked or unavailable." } as const;
+      const step = unit.approvalSteps.find((candidate) => candidate.id === input.stepId);
+      if (!step) return { error: "Approval step not found." } as const;
+      if (step.status === ProductionApprovalStepStatus.ACTIVE) {
+        return step.dispatchStatus === ProductionDispatchStatus.FAILED
+          ? { error: "The previous delivery failed. Use Retry to send this request again." } as const
+          : { duplicate: true, stepId: step.id } as const;
+      }
+      if (unit.approvalSteps.some((candidate) => candidate.status === ProductionApprovalStepStatus.ACTIVE || candidate.status === ProductionApprovalStepStatus.REJECTED)) {
+        return { error: "Finish or remove the active or rejected approval before sending another request." } as const;
+      }
+      const next = unit.approvalSteps.find((candidate) => candidate.status === ProductionApprovalStepStatus.WAITING);
+      if (next?.id !== step.id) return { error: "Send requests in the approval chain's order." } as const;
+      if (!step.clientRequestId || !step.recipientType || !step.recipientName || !step.recipientEmail) {
+        return { error: "Assign a recipient and select the information to share before sending." } as const;
+      }
+      if (step.recipientType === ProductionApprovalRecipientType.EXISTING_COLLABORATOR &&
+          (!step.recipientUserId || !isProjectParticipant(project, step.recipientUserId))) {
+        return { error: "The selected approver is no longer a project participant." } as const;
+      }
+      if (!normalizeEmail(step.recipientEmail)) return { error: "The approver email address is invalid." } as const;
+      await tx.productionApprovalStep.update({
+        where: { id: step.id },
+        data: { requestedById: user.id },
+      });
+      const activation = await activateNextStep(tx, step, project);
+      if ("error" in activation) throw new StageSixWorkflowError(activation.error);
+      await tx.projectProductionUnit.update({
+        where: { id: unit.id },
+        data: { status: ProjectProductionUnitStatus.APPROVAL_PENDING, approvedAt: null },
+      });
+      return { duplicate: false, stepId: step.id, access: activation.access } as const;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
+  } catch (error) {
+    if (error instanceof StageSixWorkflowError) return { error: error.message };
+    if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2002" || error.code === "P2034")) {
+      if (conflictRetryCount < 2) return sendProductionApprovalRequest(user, input, options, conflictRetryCount + 1);
+      return { error: "The approval chain changed at the same time. Please try again." };
+    }
+    throw error;
+  }
+  if (prepared.error) return { error: prepared.error };
+  if (prepared.duplicate) return { sent: false, stepId: prepared.stepId };
+  if (prepared.access) {
+    const dispatch = await sendExternalApproval({
+      stepId: prepared.stepId,
+      rawToken: prepared.access.token,
+      tokenHash: prepared.access.tokenHash,
+    }, options.sendEmail ?? sendResendEmail);
+    if (dispatch.error) return { error: dispatch.error };
+  }
+  return { sent: true, stepId: prepared.stepId };
 }
 
 export async function retryProductionApprovalDispatch(
@@ -2037,6 +2022,7 @@ export async function decideProductionApproval(
   },
   options: { sendEmail?: EmailSender } = {},
 ) {
+  void options; // The next request always waits for an explicit send.
   if (input.confirmed !== true) {
     return { error: "Confirm Approve or Reject before recording this decision." } as const;
   }
@@ -2222,15 +2208,15 @@ export async function decideProductionApproval(
             url: `/projects/${step.productionUnit.project.id}/stages/6?unit=${step.productionUnitId}`,
           }),
         );
-        const activation = await activateNextStep(tx, next, step.productionUnit.project);
-        if ("error" in activation) throw new StageSixWorkflowError(activation.error);
+        await tx.projectProductionUnit.update({
+          where: { id: step.productionUnitId },
+          data: { status: ProjectProductionUnitStatus.PREPARATION, approvedAt: null },
+        });
         return {
           decision: "APPROVED" as const,
           projectId: step.productionUnit.project.id,
           productionUnitId: step.productionUnitId,
-          next: activation.access
-            ? { stepId: next.id, rawToken: activation.access.token, tokenHash: activation.access.tokenHash }
-            : null,
+          next: null,
         };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -2246,12 +2232,7 @@ export async function decideProductionApproval(
     }
     throw error;
   }
-  if ("error" in outcome || !outcome.next) return outcome;
-  const dispatch = await sendExternalApproval(
-    outcome.next,
-    options.sendEmail ?? sendResendEmail,
-  );
-  return "error" in dispatch ? { ...outcome, dispatchError: dispatch.error } : outcome;
+  return outcome;
 }
 
 const approvalReadSelect = {
@@ -2829,7 +2810,7 @@ export async function handoverProductionUnit(
   let result: Awaited<ReturnType<EmailSender>>;
   try {
     result = await (options.sendEmail ?? sendResendEmail)({
-      to: STAGE_SIX_EMAIL_DELIVERY_ADDRESS,
+      to: recipient.recipientEmail,
       ...email,
       replyTo: requester.email,
     });

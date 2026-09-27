@@ -13,7 +13,6 @@ const [
   authenticatedActions,
   externalDecisionRoute,
   approvalEmail,
-  constants,
   migration,
   removalMigration,
   stageSevenService,
@@ -30,7 +29,6 @@ const [
   readFile("src/app/production-approvals/[stepId]/actions.ts", "utf8"),
   readFile("src/app/api/external/production-approval/[token]/decision/route.ts", "utf8"),
   readFile("src/lib/email/production-workflow.ts", "utf8"),
-  readFile("src/lib/stage-six-constants.ts", "utf8"),
   readFile("prisma/migrations/20260812090000_stage_six_optional_handover_contacts/migration.sql", "utf8"),
   readFile("prisma/migrations/20260816230000_stage_six_approval_step_removal_audit/migration.sql", "utf8"),
   readFile("src/lib/stage-seven.ts", "utf8"),
@@ -206,17 +204,18 @@ assert(authenticatedPage.includes("getAuthenticatedProductionApprovalData"), "Th
 assert(service.includes("ProductionApprovalStepStatus.ACTIVE") && service.includes("ProductionApprovalStepStatus.WAITING"), "Sequential activation must be server-enforced.");
 assert(service.includes("recipientUserId === user.id") && service.includes("reviewHref:"), "Stage 6 must derive the direct review action from the authenticated assigned approver.");
 assert(
-  constants.includes('name: "Slavomir Kluziak"') &&
-    constants.includes('"slavomir.kluziak@gulbahartobacco.com"') &&
-    service.includes("STAGE_SIX_EMAIL_DELIVERY_ADDRESS") &&
-    service.includes("STAGE_SIX_FIRST_APPROVER") &&
-    workspace.includes("STAGE_SIX_FIRST_APPROVER"),
-  "All Stage 6 delivery and the initial Marketing Director approval must use the shared temporary email constant.",
+  service.includes("to: step.recipientEmail") &&
+    service.includes("to: recipient.recipientEmail") &&
+    !service.includes("STAGE_SIX_EMAIL_DELIVERY_ADDRESS") &&
+    !workspace.includes("STAGE_SIX_FIRST_APPROVER") &&
+    workspace.includes("Send Approval Request") &&
+    actions.includes("sendProductionApprovalRequestAction"),
+  "Stage 6 must send only through an explicit request to the selected recipient.",
 );
 assert(
   workspace.includes("!step.isConfigured") &&
     service.includes("isConfigured: Boolean(clientRequestId)"),
-  "The first-step Assign action must be driven by persisted configuration state, not hidden by its fixed recipient placeholder.",
+  "The first-step Assign action must be driven by persisted configuration state, with no default recipient.",
 );
 assert(
   actions.includes("reorderProductionApproverAction") &&

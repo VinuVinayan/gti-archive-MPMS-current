@@ -23,6 +23,7 @@ import {
   removeProductionUnitFile,
   reorderProductionApprover,
   retryProductionApprovalDispatch,
+  sendProductionApprovalRequest,
 } from "@/lib/stage-six";
 import { publishProjectActivityUpdatedAfterResponse } from "@/lib/realtime/server";
 
@@ -127,6 +128,24 @@ export async function reorderProductionApproverAction(input: {
   const result = await reorderProductionApprover(user, input);
   revalidateStageSix(input.projectId);
   if (!("error" in result)) {
+    publishStageSixChange({
+      projectId: input.projectId,
+      actorId: user.id,
+      changedEntityId: input.productionUnitId,
+    });
+  }
+  return result;
+}
+
+export async function sendProductionApprovalRequestAction(input: {
+  projectId: string;
+  productionUnitId: string;
+  stepId: string;
+}) {
+  const user = await requireUser();
+  const result = await sendProductionApprovalRequest(user, input);
+  revalidateStageSix(input.projectId);
+  if (!("error" in result) && result.sent) {
     publishStageSixChange({
       projectId: input.projectId,
       actorId: user.id,

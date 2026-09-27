@@ -49,6 +49,7 @@
     "stage-five:ui-check": "node scripts/stage-five-ui-checks.mjs",
     "stage-five:integration-check": "tsc --project scripts/tsconfig.stage-five-integration.json && COMPILED_ALIAS_ROOT=.tmp/stage-five-integration node -r ./scripts/register-compiled-alias.cjs .tmp/stage-five-integration/scripts/stage-five-integration-check.js",
     "stage-six:ui-check": "node scripts/stage-six-ui-checks.mjs",
+    "stage-six:approval-check": "tsc --project scripts/tsconfig.stage-six-integration.json && node scripts/run-stage-six-isolated-integration.mjs",
     "stage-six:integration-check": "tsc --project scripts/tsconfig.stage-six-integration.json && COMPILED_ALIAS_ROOT=.tmp/stage-six-integration node -r ./scripts/register-compiled-alias.cjs .tmp/stage-six-integration/scripts/stage-six-integration-check.js",
     "stage-seven:ui-check": "node scripts/stage-seven-ui-checks.mjs",
     "stage-seven:integration-check": "tsc --project scripts/tsconfig.stage-seven-integration.json && COMPILED_ALIAS_ROOT=.tmp/stage-seven-integration node -r ./scripts/register-compiled-alias.cjs .tmp/stage-seven-integration/scripts/stage-seven-integration-check.js",
