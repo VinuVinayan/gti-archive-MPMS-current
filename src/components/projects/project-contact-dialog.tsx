@@ -7,10 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { CreateContactDirectoryEntryInput } from "@/lib/project-inquiry";
+import { getRequiredProjectContactFields } from "@/lib/project-contact-validation";
 
 export type ProjectContactForm = Required<Omit<CreateContactDirectoryEntryInput, "kind">>;
 
 type ProjectContactDialogProps = {
+  kind: "CLIENT" | "CONTACT";
   isOpen: boolean;
   title: string;
   description: string;
@@ -28,27 +30,28 @@ type ProjectContactDialogProps = {
 };
 
 type ContactField = Exclude<keyof ProjectContactForm, "entityType">;
-const contactFields: Record<ProjectContactForm["entityType"], ReadonlyArray<readonly [ContactField, string, string, boolean]>> = {
+const contactFields: Record<ProjectContactForm["entityType"], ReadonlyArray<readonly [ContactField, string, string]>> = {
   COMPANY: [
-    ["company", "Company Name", "Company or organisation", true],
-    ["companyEmail", "Company Email ID", "company@example.com", false],
-    ["companyPhone", "Company Contact Number", "+971 ...", false],
-    ["companyWebsite", "Company Website", "https://example.com", false],
-    ["name", "Contact Person / Representative", "Representative full name", true],
-    ["email", "Representative Email", "name@example.com", true],
-    ["phone", "Representative Contact Number", "+971 ...", true],
-    ["position", "Representative Designation", "Role or position", true],
+    ["company", "Company Name", "Company or organisation"],
+    ["companyEmail", "Company Email ID", "company@example.com"],
+    ["companyPhone", "Company Contact Number", "+971 ..."],
+    ["companyWebsite", "Company Website", "https://example.com"],
+    ["name", "Contact Person / Representative", "Representative full name"],
+    ["email", "Representative Email", "name@example.com"],
+    ["phone", "Representative Contact Number", "+971 ..."],
+    ["position", "Representative Designation", "Role or position"],
   ],
   PERSON: [
-    ["company", "Company Name (if applicable)", "Company or organisation", false],
-    ["name", "Full Name", "Individual / contact person’s full name", true],
-    ["email", "Email", "name@example.com", true],
-    ["phone", "Contact Number", "+971 ...", true],
-    ["position", "Designation", "Role or position", true],
+    ["company", "Company Name (if applicable)", "Company or organisation"],
+    ["name", "Full Name", "Individual / contact person’s full name"],
+    ["email", "Email", "name@example.com"],
+    ["phone", "Contact Number", "+971 ..."],
+    ["position", "Designation", "Role or position"],
   ],
 };
 
 export function ProjectContactDialog({
+  kind,
   isOpen,
   title,
   description,
@@ -66,7 +69,13 @@ export function ProjectContactDialog({
   >({});
 
   const isCompany = form.entityType === "COMPANY";
-  const fields = contactFields[form.entityType];
+  const requiredFields = getRequiredProjectContactFields({ kind, entityType: form.entityType });
+  const fields = contactFields[form.entityType].map(([field, label, placeholder]) => [
+    field,
+    field === "company" && kind === "CLIENT" ? "Company Name" : label,
+    placeholder,
+    requiredFields.includes(field),
+  ] as const);
 
   useEffect(() => {
     const firstInvalidField = contactFields[form.entityType]

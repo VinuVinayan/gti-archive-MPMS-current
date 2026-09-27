@@ -344,7 +344,7 @@ function PartySelector({
           ) : filteredOptions.length ? (
             filteredOptions.map((option) => {
               const selected = selectedKeys.has(`${option.source}:${option.id}`);
-              const optionName = showPersonName ? option.name : partyLabel(option);
+              const optionName = showPersonName ? option.name.trim() || partyLabel(option) : partyLabel(option);
               const companyName = option.source === "MANUAL_CONTACT" ? option.company?.trim() : null;
               const optionDetails = showPersonName
                 ? companyName || "Company name not available."
@@ -1411,6 +1411,7 @@ export function StageOneWorkspace({
       )}
 
       <ProjectContactDialog
+        kind={contactTarget === "client" ? "CLIENT" : "CONTACT"}
         isOpen={contactTarget !== null}
         title={contactTarget === "client" ? "Add Client" : "Add Beneficiary"}
         description={

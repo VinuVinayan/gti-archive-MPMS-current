@@ -152,6 +152,7 @@ async function main() {
 
   const mainProject = await createProject("inquiry-main-project", "Rich Inquiry");
   const minimalProject = await createProject("inquiry-minimal-project", "Minimal Inquiry");
+  const companyOnlyProject = await createProject("inquiry-company-only-project", "Company Only Inquiry");
   const failureProject = await createProject("inquiry-failure-project", "Failure Inquiry");
   const foreignProject = await createProject("inquiry-foreign-project", "Foreign Asset");
   const relatedUser = {
@@ -280,10 +281,13 @@ async function main() {
     kind: "CLIENT", name: "Representative", email: "rep@example.test", phone: "+971501234567", position: "Manager",
   });
   assert("error" in missingCompany && missingCompany.fieldErrors?.company, "New clients must require a company on the server.");
-  const missingRepresentative = await createContactDirectoryEntry(superAdmin, mainProject.id, {
-    kind: "CLIENT", company: "Incomplete Company", name: "",
+  const companyOnlyClient = await createContactDirectoryEntry(superAdmin, mainProject.id, {
+    kind: "CLIENT", company: "Company Only Client",
   });
-  assert("error" in missingRepresentative && ["name", "email", "phone", "position"].every((field) => missingRepresentative.fieldErrors?.[field as "name" | "email" | "phone" | "position"]), "New clients must require all representative details on the server.");
+  assert("contact" in companyOnlyClient && companyOnlyClient.contact.name === "" &&
+    companyOnlyClient.contact.email === null && companyOnlyClient.contact.phone === null && companyOnlyClient.contact.position === null,
+    "A company client must save with only the company name and no invented representative.");
+  assert((await searchProjectInquiryPartyOptions(superAdmin, mainProject.id, "Company Only Client")).some((contact) => contact.id === companyOnlyClient.contact.id), "Company-only clients remain searchable.");
   const companyBeneficiary = await createContactDirectoryEntry(superAdmin, mainProject.id, {
     kind: "CONTACT", entityType: "COMPANY", company: "Beneficiary Company",
     name: "Beneficiary Representative", email: "representative@example.test",
@@ -292,14 +296,24 @@ async function main() {
   });
   assert("contact" in companyBeneficiary && companyBeneficiary.contact.entityType === "COMPANY", "Beneficiaries must support company records.");
   const personClient = await createContactDirectoryEntry(superAdmin, mainProject.id, {
-    kind: "CLIENT", entityType: "PERSON", name: "Individual Client", email: "individual@example.test",
-    phone: "+971501234567", position: "Consultant", company: "Optional Employer",
+    kind: "CLIENT", entityType: "PERSON", name: "Individual Client", company: "Client Employer",
     companyEmail: "old-company@example.test", companyPhone: "not a phone", companyWebsite: "not a website",
   });
   assert("contact" in personClient && personClient.contact.entityType === "PERSON" &&
-    personClient.contact.company === "Optional Employer" && personClient.contact.companyEmail === null &&
-    personClient.contact.companyPhone === null && personClient.contact.companyWebsite === null,
-    "Person clients must retain an optional company name and discard hidden company contact fields.");
+    personClient.contact.company === "Client Employer" && personClient.contact.companyEmail === null &&
+    personClient.contact.companyPhone === null && personClient.contact.companyWebsite === null &&
+    personClient.contact.email === null && personClient.contact.phone === null && personClient.contact.position === null,
+    "Person clients must save with name and company alone and discard hidden company contact fields.");
+  const personWithoutCompany = await createContactDirectoryEntry(superAdmin, mainProject.id, { kind: "CLIENT", entityType: "PERSON", name: "Individual Client" });
+  assert("error" in personWithoutCompany && personWithoutCompany.fieldErrors?.company, "A person client's company is required.");
+  const companyOnlyResult = await completeProjectInquiry(superAdmin, {
+    projectId: companyOnlyProject.id,
+    client: { source: ProjectInquiryPartySource.MANUAL_CONTACT, id: companyOnlyClient.contact.id },
+    finalBeneficiaries: [{ source: ProjectInquiryPartySource.MANUAL_CONTACT, id: companyBeneficiary.contact.id }],
+  });
+  assert("success" in companyOnlyResult, "Stage 1 must accept a company-only client.");
+  const savedCompanyOnly = (await getProjectInquiryPageData(superAdmin, companyOnlyProject.id)).inquiry?.client;
+  assert(savedCompanyOnly?.entityType === "COMPANY" && savedCompanyOnly.company === "Company Only Client" && savedCompanyOnly.name === "", "Company-only clients must survive saving and reloading the inquiry.");
   const personCompanyResult = await completeProjectInquiry(superAdmin, {
     projectId: minimalProject.id,
     client: { source: ProjectInquiryPartySource.MANUAL_CONTACT, id: personClient.contact.id },
@@ -776,6 +790,7 @@ main()
           in: [
             "inquiry-main-project",
             "inquiry-minimal-project",
+            "inquiry-company-only-project",
             "inquiry-failure-project",
             "inquiry-foreign-project",
           ],

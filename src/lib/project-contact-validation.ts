@@ -3,7 +3,7 @@ export type ProjectContactEntityType = "PERSON" | "COMPANY";
 export type ProjectContactInput = {
   kind?: "CLIENT" | "CONTACT";
   entityType?: ProjectContactEntityType;
-  name: string;
+  name?: string;
   company?: string;
   companyEmail?: string;
   companyPhone?: string;
@@ -15,6 +15,17 @@ export type ProjectContactInput = {
 
 export type ProjectContactField = Exclude<keyof ProjectContactInput, "kind">;
 export type ProjectContactFieldErrors = Partial<Record<ProjectContactField, string>>;
+
+export function getRequiredProjectContactFields(
+  input: Pick<ProjectContactInput, "kind" | "entityType">,
+): readonly ProjectContactField[] {
+  if (input.kind === "CLIENT") {
+    return input.entityType === "PERSON" ? ["name", "company"] : ["company"];
+  }
+  if (input.entityType === "COMPANY") return ["company", "name", "email", "phone", "position"];
+  if (input.entityType === "PERSON") return ["name", "email", "phone", "position"];
+  return ["name"];
+}
 
 const MAX_CONTACT_NAME_LENGTH = 160;
 const MAX_CONTACT_COMPANY_LENGTH = 160;
@@ -85,6 +96,7 @@ export function normalizeInternationalPhone(value: string) {
 
 export function validateProjectContactInput(input: ProjectContactInput) {
   const fieldErrors: ProjectContactFieldErrors = {};
+  const requiredFields = getRequiredProjectContactFields(input);
   const entityType = input.entityType ?? (input.kind === "CLIENT" ? "COMPANY" : "PERSON");
   const isCompany = entityType === "COMPANY";
   if (entityType !== "PERSON" && entityType !== "COMPANY") {
@@ -122,14 +134,12 @@ export function validateProjectContactInput(input: ProjectContactInput) {
     }
   }
 
-  if (isCompany && !company) fieldErrors.company = "Company name is required.";
-  if (isCompany || input.entityType === "PERSON") {
-    if (!email) fieldErrors.email = isCompany ? "Representative email is required." : "Email is required.";
-    if (!rawPhone) fieldErrors.phone = isCompany ? "Representative contact number is required." : "Contact number is required.";
-    if (!position) fieldErrors.position = isCompany ? "Representative designation is required." : "Designation is required.";
-  }
+  if (requiredFields.includes("company") && !company) fieldErrors.company = "Company name is required.";
+  if (requiredFields.includes("email") && !email) fieldErrors.email = isCompany ? "Representative email is required." : "Email is required.";
+  if (requiredFields.includes("phone") && !rawPhone) fieldErrors.phone = isCompany ? "Representative contact number is required." : "Contact number is required.";
+  if (requiredFields.includes("position") && !position) fieldErrors.position = isCompany ? "Representative designation is required." : "Designation is required.";
 
-  if (!name) {
+  if (requiredFields.includes("name") && !name) {
     fieldErrors.name = isCompany
       ? "Contact person / representative is required."
       : "Name is required.";
