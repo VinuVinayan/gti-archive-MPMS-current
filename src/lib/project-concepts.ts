@@ -37,6 +37,7 @@ import { isAllowedStageSubmissionFile } from "@/lib/upload-validation";
 import { hasStageFiveDownstreamActivityForAttachment } from "@/lib/stage-five";
 import { deleteObjectIfNeeded } from "@/lib/storage/s3";
 import { isProjectStatusCompleted } from "@/lib/project-statuses";
+import { getStageSkipRevocationEligibility } from "@/lib/project-stage-skip-revocation";
 
 export type ProjectConceptAttachmentReference = {
   id: string;
@@ -503,6 +504,7 @@ export async function getProjectConceptFolders(
       canRequestConceptCompletion(user, project, folder, stageKey))),
     canManage,
     canCompleteStage,
+    skipRevocation: await getStageSkipRevocationEligibility(user, { projectId, stageKey }),
     workflowStatus: getWorkflowStageStatus(project, stageKey) ?? null,
     completionConcepts: canCompleteStage
       ? visibleFolders.map((folder) => ({
@@ -612,6 +614,21 @@ export async function createProjectConceptFolder(
     const folder = await withPrismaRetry(() =>
       prisma.$transaction(
         async (tx) => {
+          // A skip can be undone while a task dialog is open. Recheck inside the
+          // same serializable transaction that creates the task.
+          const currentProject = await tx.project.findUnique({
+            where: { id: input.projectId }, select: projectStageAccessSelect,
+          });
+          if (!currentProject || currentProject.completedAt || currentProject.archivedAt ||
+              isProjectStatusCompleted(currentProject.status) ||
+              getWorkflowStageStatus(currentProject, input.stageKey) !== ProjectWorkflowStageStatus.AVAILABLE ||
+              !currentProject.executors.some((executor) => executor.userId === assignedExecutorId) ||
+              !canManageProjectConcept(user, {
+                ...managerContext, ownerId: currentProject.ownerId,
+                coOwnerIds: currentProject.coOwners.map((entry) => entry.userId),
+              })) {
+            throw new Error("CONCEPT_STAGE_CHANGED");
+          }
           const duplicate = await tx.projectConceptFolder.findUnique({
             where: {
               projectId_workflowStageKey_normalizedName: {
@@ -708,12 +725,16 @@ export async function createProjectConceptFolder(
             select: conceptFolderSelect,
           });
         },
-        { maxWait: 5_000, timeout: 15_000 },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 15_000 },
       ),
     );
 
     return { folder: mapConceptFolder(folder, user.id, canCompleteConceptWithoutFile(user, project, folder, input.stageKey)) } as const;
   } catch (error) {
+    if ((error instanceof Error && error.message === "CONCEPT_STAGE_CHANGED") ||
+        (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034")) {
+      return { error: "The stage or its executor assignment changed. Refresh before creating this task." } as const;
+    }
     if (
       error instanceof Error &&
       error.message === "INVALID_CONCEPT_BRIEF_ATTACHMENTS"

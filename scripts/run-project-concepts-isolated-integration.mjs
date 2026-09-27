@@ -36,6 +36,7 @@ try {
   run("pnpm", ["exec", "prisma", "migrate", "deploy"]);
   console.log("All migrations applied to a disposable local database.");
   for (const [compiledRoot, script] of [
+    [".tmp/project-concept-integration", "project-stage-skip-revocation-check"],
     [".tmp/project-concept-integration", "project-concept-manual-stage-check"],
     [".tmp/project-concept-integration", "project-concept-completion-request-check"],
     [".tmp/project-concept-integration", "project-concept-without-file-check"],

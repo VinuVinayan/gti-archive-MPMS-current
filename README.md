@@ -80,6 +80,19 @@ To test faster uploads for global users:
 
 If acceleration is working, the upload host should change from the regional S3 hostname to the S3 accelerate hostname.
 
+## Undoing a Stage 3 or Stage 4 skip
+
+The project owner or an administrator can open a skipped stage and choose
+**Undo Skip**. An executor must be added through **Edit Project** first if the
+project has none. Reopened tasks still require an executor assignment.
+
+Reopening locks the later stages again. It is blocked when later tasks, direct
+Stage 5 uploads, checklist changes, information requests, saved drafts, or
+production work exist, and after Stage 5 is completed. Only untouched checklist
+entries automatically created by skipping Stage 4 can be reset; the original
+Stage 3 files and approvals remain intact. The server checks these conditions
+again when confirming and records the action in the project activity log.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

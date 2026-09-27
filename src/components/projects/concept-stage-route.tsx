@@ -154,6 +154,7 @@ async function ConceptStageDataContent({
       initialFolders={folders.folders}
       canManageConcepts={folders.canManage}
       canCompleteStage={folders.canCompleteStage}
+      skipRevocation={folders.skipRevocation}
       stageWorkflowStatus={folders.workflowStatus}
       completionConcepts={folders.completionConcepts}
       executors={folders.executors}

@@ -35,6 +35,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { RequestConceptCompletionButton } from "@/components/projects/request-concept-completion-button";
 import { CompleteConceptTaskButton } from "@/components/projects/complete-concept-task-button";
 import { CompleteConceptStageButton } from "@/components/projects/complete-concept-stage-button";
+import { RevokeStageSkipButton } from "@/components/projects/revoke-stage-skip-button";
+import type { StageSkipRevocationEligibility } from "@/lib/project-stage-skip-revocation";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import {
   DropdownMenu,
@@ -515,6 +517,7 @@ export function ConceptStageWorkspace({
   initialFolders,
   canManageConcepts,
   canCompleteStage,
+  skipRevocation,
   stageWorkflowStatus,
   completionConcepts,
   executors,
@@ -529,6 +532,7 @@ export function ConceptStageWorkspace({
   initialFolders: ProjectConceptFolderRecord[];
   canManageConcepts: boolean;
   canCompleteStage: boolean;
+  skipRevocation: StageSkipRevocationEligibility;
   stageWorkflowStatus: "LOCKED" | "AVAILABLE" | "COMPLETED" | null;
   completionConcepts: Array<{
     id: string;
@@ -808,6 +812,7 @@ export function ConceptStageWorkspace({
       </header> : null}
 
       {showChrome ? <ProjectFlowSummaryStrip project={project} /> : null}
+      <RevokeStageSkipButton projectId={project.id} stageKey={stageKey} eligibility={skipRevocation} />
 
       <section
         id="concept-folders"

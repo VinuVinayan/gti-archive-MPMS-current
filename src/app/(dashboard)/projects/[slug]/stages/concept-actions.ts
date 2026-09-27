@@ -30,6 +30,30 @@ import {
 } from "@/lib/project-concepts";
 import { PROJECTS_CACHE_TAG } from "@/lib/projects";
 import { publishProjectActivityUpdatedAfterResponse } from "@/lib/realtime/server";
+import { revokeSkippedConceptStage } from "@/lib/project-stage-skip-revocation";
+
+export async function revokeSkippedConceptStageAction(input: {
+  projectId: string;
+  stageKey: ConceptWorkflowStageKey;
+}) {
+  const user = await requireUser();
+  try {
+    const result = await revokeSkippedConceptStage(user, input);
+    if ("changed" in result) {
+      revalidatePath(`/projects/${input.projectId}`);
+      for (const stage of [3, 4, 5, 6, 7]) revalidatePath(`/projects/${input.projectId}/stages/${stage}`, "layout");
+      revalidatePath("/tasks");
+      revalidateTag(PROJECTS_CACHE_TAG, "max");
+      publishProjectActivityUpdatedAfterResponse({
+        projectId: input.projectId, stageId: null, eventType: "timeline_updated", actorId: user.id,
+      });
+    }
+    return result;
+  } catch (error) {
+    console.error("[project-concepts] undo skip failed", error);
+    return { error: "Unable to undo this skip right now. Refresh and try again." } as const;
+  }
+}
 
 function getConceptStageNumber(stageKey: ConceptWorkflowStageKey) {
   return stageKey === "CONCEPT_CREATION" ? 3 : 4;

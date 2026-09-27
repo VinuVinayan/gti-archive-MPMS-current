@@ -12,6 +12,7 @@
     "target": "ES2022"
   },
   "include": [
+    "project-stage-skip-revocation-check.ts",
     "project-concept-manual-stage-check.ts",
     "project-concept-completion-request-check.ts",
     "project-concept-without-file-check.ts",
