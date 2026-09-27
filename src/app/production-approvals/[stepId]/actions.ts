@@ -11,6 +11,7 @@ export async function decideAuthenticatedProductionApprovalAction(input: {
   decision: "APPROVE" | "REJECT";
   comment?: string;
   confirmed?: boolean;
+  requestVersion?: string;
 }) {
   const user = await requireUser(`/production-approvals/${input.stepId}`);
   const result = await decideProductionApproval(
@@ -19,6 +20,7 @@ export async function decideAuthenticatedProductionApprovalAction(input: {
       decision: input.decision,
       comment: input.comment,
       confirmed: input.confirmed,
+      requestVersion: input.requestVersion,
     },
   );
   revalidatePath(`/production-approvals/${input.stepId}`);

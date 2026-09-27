@@ -1590,6 +1590,7 @@ model ProductionApprovalStep {
   decidedByUserId             String?
   decidedByUser               User?                            @relation("ProductionApprovalDecider", fields: [decidedByUserId], references: [id], onDelete: SetNull)
   decisionComment             String?                          @db.Text
+  rejectionHistory            Json                             @default("[]")
   decidedAt                   DateTime?
   removedAt                   DateTime?
   removedByUserId             String?

@@ -58,10 +58,18 @@ Kluziak**. Set `SLAVOMIR_APPROVAL_EMAIL` separately in each deployment:
 
 This is a server-side variable; do not prefix it with `NEXT_PUBLIC_`. Restart or
 redeploy after changing it. The app uses the current value for each explicit
-**Send Approval Request** or **Retry**, including existing waiting approvals.
+**Send Approval Request**, **Resend Approval Request**, or **Retry**, including existing approvals.
 A missing or invalid value blocks this approval; there is no fallback address.
 Other approvers and handover recipients keep their selected addresses. Requests
 still require a click for every step in the chain.
+
+Rejected Stage 6 approval steps offer **Resend Approval Request**. The sender can
+select updated production files and shared information before sending. Each
+resubmission keeps the previous rejection, comments, recipient, and shared
+snapshot in history. Earlier approvals stay intact, old external links are
+invalidated, and later approvers still wait for an explicit send. A failed email
+delivery uses **Retry** on the new request. Closed projects and completed or
+handed-over workflows cannot be resubmitted.
 
 Recurring Stage 5 and Stage 7 request reminders require a scheduler to call
 `GET /api/internal/request-reminders` with `Authorization: Bearer $CRON_SECRET`.

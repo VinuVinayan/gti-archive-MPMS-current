@@ -11,5 +11,5 @@
     "rootDir": "..",
     "target": "ES2022"
   },
-  "include": ["stage-six-integration-check.ts"]
+  "include": ["stage-six-integration-check.ts", "stage-six-resend-check.ts"]
 }

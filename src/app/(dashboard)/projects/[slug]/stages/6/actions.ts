@@ -24,6 +24,8 @@ import {
   reorderProductionApprover,
   retryProductionApprovalDispatch,
   sendProductionApprovalRequest,
+  resendRejectedProductionApproval,
+  type ResendProductionApprovalInput,
 } from "@/lib/stage-six";
 import { publishProjectActivityUpdatedAfterResponse } from "@/lib/realtime/server";
 
@@ -151,6 +153,16 @@ export async function sendProductionApprovalRequestAction(input: {
       actorId: user.id,
       changedEntityId: input.productionUnitId,
     });
+  }
+  return result;
+}
+
+export async function resendRejectedProductionApprovalAction(input: ResendProductionApprovalInput) {
+  const user = await requireUser();
+  const result = await resendRejectedProductionApproval(user, input);
+  revalidateStageSix(input.projectId);
+  if (!("error" in result) && result.sent) {
+    publishStageSixChange({ projectId: input.projectId, actorId: user.id, changedEntityId: input.productionUnitId });
   }
   return result;
 }

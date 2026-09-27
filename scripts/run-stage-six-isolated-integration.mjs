@@ -36,6 +36,7 @@ try {
   run("pnpm", ["exec", "prisma", "migrate", "deploy"]);
   console.log("All migrations applied to a disposable local database.");
   for (const [compiledRoot, script] of [
+    [".tmp/stage-six-integration", "stage-six-resend-check"],
     [".tmp/stage-six-integration", "stage-six-integration-check"],
   ]) {
     env.COMPILED_ALIAS_ROOT = compiledRoot;

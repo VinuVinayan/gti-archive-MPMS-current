@@ -48,6 +48,7 @@ import {
   prepareStageSixArchiveAction,
   retryProductionApprovalDispatchAction,
   sendProductionApprovalRequestAction,
+  resendRejectedProductionApprovalAction,
   saveStageSixArchiveAction,
 } from "@/app/(dashboard)/projects/[slug]/stages/6/actions";
 import {
@@ -378,7 +379,7 @@ function ProductionDetails({ unit }: { unit: StageSixUnitRecord }) {
   );
 }
 
-type ApproverDialogMode = "marketing-director" | "additional";
+type ApproverDialogMode = "marketing-director" | "additional" | { resendStepId: string };
 
 function ApproverDialog({
   mode,
@@ -398,6 +399,9 @@ function ApproverDialog({
   onSaved: () => void;
 }) {
   const [pending, startPending] = useTransition();
+  const isResend = typeof mode === "object";
+  const rejectedStep = typeof mode === "object" ? unit.approvalSteps.find((step) => step.id === mode.resendStepId) : null;
+  const [expectedDecidedAt] = useState(rejectedStep?.decidedAt);
   const requestId = useRef(crypto.randomUUID());
   const [recipientType, setRecipientType] = useState<ProductionApprovalRecipientType>(
     ProductionApprovalRecipientType.EXISTING_COLLABORATOR,
@@ -405,13 +409,13 @@ function ApproverDialog({
   const [recipientUserId, setRecipientUserId] = useState("");
   const [recipientName, setRecipientName] = useState("");
   const [recipientEmail, setRecipientEmail] = useState("");
-  const [fieldKeys, setFieldKeys] = useState<string[]>([]);
+  const [fieldKeys, setFieldKeys] = useState<string[]>(rejectedStep?.sharedFieldKeys ?? []);
   const availableFiles = [unit.sourceFile, ...unit.productionFiles];
-  const [fileIds, setFileIds] = useState<string[]>(availableFiles.map((file) => file.id));
-  const [message, setMessage] = useState("");
+  const [fileIds, setFileIds] = useState<string[]>(rejectedStep?.selectedFileIds ?? availableFiles.map((file) => file.id));
+  const [message, setMessage] = useState(rejectedStep?.message ?? "");
   const autosave = useProjectFormAutosave({
     projectId,
-    formKey: `stage-six-approver:${unit.id}:${mode}:manual`,
+    formKey: `stage-six-approver:${unit.id}:${typeof mode === "object" ? `resend:${mode.resendStepId}:${expectedDecidedAt}` : mode}:manual`,
     value: {
       recipientType,
       recipientUserId,
@@ -432,7 +436,11 @@ function ApproverDialog({
     },
   });
   const allSelected = fieldKeys.length === STAGE_FIVE_FIELD_DEFINITIONS.length && fileIds.length === availableFiles.length;
-  const recipientReady = mode === "marketing-director"
+  const isMarketingDirector = mode === "marketing-director" || Boolean(rejectedStep?.isMarketingDirectorRequired);
+  const recipientReady = isResend
+    ? Boolean(rejectedStep?.status === ProductionApprovalStepStatus.REJECTED && rejectedStep.decidedAt === expectedDecidedAt &&
+        (isMarketingDirector ? marketingDirectorRecipient.email : rejectedStep.recipientEmail))
+    : mode === "marketing-director"
     ? Boolean(marketingDirectorRecipient.email)
     : recipientType === ProductionApprovalRecipientType.EXISTING_COLLABORATOR
     ? Boolean(recipientUserId)
@@ -440,7 +448,7 @@ function ApproverDialog({
   const canSubmit =
     recipientReady &&
     (fieldKeys.length > 0 || fileIds.length > 0) &&
-    (mode !== "marketing-director" || fileIds.length > 0);
+    (!isMarketingDirector || fileIds.length > 0);
   const closeWithAutosave = () => {
     void autosave.flush().finally(onClose);
   };
@@ -452,6 +460,27 @@ function ApproverDialog({
   function save() {
     if (!canSubmit || pending) return;
     startPending(async () => {
+      if (isResend && rejectedStep && expectedDecidedAt) {
+        try {
+          const result = await resendRejectedProductionApprovalAction({
+            projectId, productionUnitId: unit.id, stepId: rejectedStep.id,
+            expectedDecidedAt,
+            sharedFieldKeys: fieldKeys as never[], selectedFileIds: fileIds, message,
+          });
+          if ("error" in result) {
+            showErrorToast("Unable to resend approval.", result.error);
+            onSaved();
+            return;
+          }
+          await autosave.clearDraft().catch(() => undefined);
+          showSuccessToast(result.sent ? "Approval request resent." : "This rejection has already been resubmitted.");
+          onSaved();
+          onClose();
+        } catch {
+          showErrorToast("Unable to resend approval.", "Refresh and try again.");
+        }
+        return;
+      }
       const payload = {
         clientRequestId: requestId.current,
         projectId,
@@ -485,18 +514,19 @@ function ApproverDialog({
           <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[#e7ece8] px-5 py-4 sm:px-6 sm:py-5">
             <div>
               <p className="text-[10px] font-[760] uppercase tracking-[.12em] text-[#4c795e]">Approval Chain</p>
-              <h2 id="add-approver-title" className="mt-1.5 text-[20px] font-[760] text-[#162019] sm:text-[22px]">{mode === "marketing-director" ? "Assign Marketing Director" : "Add Approver"}</h2>
+              <h2 id="add-approver-title" className="mt-1.5 text-[20px] font-[760] text-[#162019] sm:text-[22px]">{isResend ? "Resend Approval Request" : mode === "marketing-director" ? "Assign Marketing Director" : "Add Approver"}</h2>
+              {isResend ? <p className="mt-2 text-[11px] leading-5 text-[#727d75]">Choose the files and information to send again. Rejection history and prior approvals will be kept. Later requests still require a separate click.</p> : null}
               {mode === "marketing-director" ? <p className="mt-1 text-[11px] font-[700] text-[#9a6a22]">Initial approval role</p> : null}
             </div>
-            <Button type="button" variant="secondary" size="icon" aria-label="Close approval request" onClick={closeWithAutosave}><X className="h-4 w-4" /></Button>
+            <Button type="button" variant="secondary" size="icon" disabled={pending} aria-label="Close approval request" onClick={closeWithAutosave}><X className="h-4 w-4" /></Button>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6 sm:py-5">
-            {mode === "marketing-director" ? (
+            {isMarketingDirector || isResend ? (
               <div className="rounded-[14px] border border-[#dfe6df] bg-[#f7faf7] p-4">
-                <p className="text-[12px] font-[720] text-[#27322b]">{marketingDirectorRecipient.name}</p>
+                <p className="text-[12px] font-[720] text-[#27322b]">{isMarketingDirector ? marketingDirectorRecipient.name : rejectedStep?.recipientName}</p>
                 <p className="mt-1 break-words text-[11px] text-[#66736a]">
-                  {marketingDirectorRecipient.email || "Approval email is not configured. Contact an administrator."}
+                  {(isMarketingDirector ? marketingDirectorRecipient.email : rejectedStep?.recipientEmail) || "Approval email is not configured. Contact an administrator."}
                 </p>
               </div>
             ) : (
@@ -575,7 +605,7 @@ function ApproverDialog({
           <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-[#e7ece8] bg-white px-5 py-4 sm:flex-row sm:items-center sm:px-6">
             <Button type="button" className="w-full sm:w-auto" variant="secondary" disabled={pending} onClick={closeWithAutosave}>Cancel</Button>
             <ProjectFormAutosaveStatus status={autosave.status} savedAt={autosave.savedAt} restoredAt={autosave.restoredAt} onRetry={() => void autosave.retry()} className="sm:mr-auto" />
-            <Button type="button" className="w-full sm:w-auto" disabled={!canSubmit || pending} onClick={save}><Plus className="h-4 w-4" /> {pending ? "Saving..." : "Save Approver"}</Button>
+            <Button type="button" className="w-full sm:w-auto" disabled={!canSubmit || pending} onClick={save}>{isResend ? <Send className="h-4 w-4" /> : <Plus className="h-4 w-4" />} {pending ? isResend ? "Sending..." : "Saving..." : isResend ? "Resend Approval Request" : "Save Approver"}</Button>
           </div>
         </CardContent>
       </Card>
@@ -734,12 +764,21 @@ function ApprovalSection({
               <p className="mt-1 min-w-0 whitespace-normal break-words text-[10px] text-[#77827a]">{step.recipientType || step.isMarketingDirectorRequired ? `${step.recipientName}${step.recipientEmail ? ` · ${step.recipientEmail}` : ""}` : "Recipient not assigned"}</p>
               {step.failureMessage ? <p className="mt-1 text-[10px] text-[#a54b43]">{step.failureMessage}</p> : null}
               {step.decisionComment ? <p className="mt-1 text-[10px] italic text-[#657168]">“{step.decisionComment}”</p> : null}
+              {step.rejectionHistory.length ? <details className="mt-2 text-[10px] text-[#657168]">
+                <summary className="cursor-pointer font-semibold">Previous rejections ({step.rejectionHistory.length})</summary>
+                <ul className="mt-2 space-y-2">{step.rejectionHistory.map((entry) => <li key={entry.decidedAt}>
+                  <p>{entry.recipientName} · Rejected {new Date(entry.decidedAt).toLocaleString()}</p>
+                  {entry.decisionComment ? <p className="mt-1 whitespace-pre-wrap italic">“{entry.decisionComment}”</p> : null}
+                  <p className="mt-1">Request resent {new Date(entry.resentAt).toLocaleString()}</p>
+                </li>)}</ul>
+              </details> : null}
             </div>
             <ApprovalBadge status={step.status} dispatch={step.dispatchStatus} />
             <div className="flex justify-end gap-1">
               {step.reviewHref ? <Button asChild type="button" size="sm"><Link href={step.reviewHref}><ShieldCheck className="h-3.5 w-3.5" /> Review Approval</Link></Button> : null}
               {canManage && step.sequence === 1 && !step.isConfigured && chainIsEditable ? <Button type="button" size="sm" onClick={() => onOpenDialog("marketing-director")}><ShieldCheck className="h-3.5 w-3.5" /> Assign</Button> : null}
               {canSend && nextStep?.id === step.id ? <Button type="button" size="sm" disabled={sending || removing} onClick={openSendDialog}><Send className="h-3.5 w-3.5" /> Send Approval Request</Button> : null}
+              {canManage && chainIsEditable && step.status === ProductionApprovalStepStatus.REJECTED ? <Button type="button" size="sm" disabled={sending || removing} onClick={() => onOpenDialog({ resendStepId: step.id })}><RefreshCw className="h-3.5 w-3.5" /> Resend Approval Request</Button> : null}
               {canManage && chainIsEditable && step.dispatchStatus === ProductionDispatchStatus.FAILED && step.status === ProductionApprovalStepStatus.ACTIVE ? <Button type="button" variant="outline" size="sm" onClick={() => retry(step.id)}><RefreshCw className="h-3.5 w-3.5" /> Retry</Button> : null}
               {canManage && chainIsEditable && reorderableSteps.some((candidate) => candidate.id === step.id) ? (
                 <>
@@ -754,7 +793,7 @@ function ApprovalSection({
         {unit.approvalSteps.length === 0 ? <p className="px-5 py-7 text-center text-[11px] text-[#77827a]">No active approvers. Approval is not required unless an approver is added before handover.</p> : null}
       </div>
       {unit.status === ProjectProductionUnitStatus.REJECTED ? (
-        <div className="flex gap-2 border-t border-[#f0d5d1] bg-[#fff7f5] px-5 py-4 text-[11px] leading-5 text-[#9b5149]"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />The chain stopped at rejection. Prior approvals are preserved. Restart Approval Chain is intentionally deferred.</div>
+        <div className="flex gap-2 border-t border-[#f0d5d1] bg-[#fff7f5] px-5 py-4 text-[11px] leading-5 text-[#9b5149]"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />The chain stopped at rejection. Use Resend Approval Request on the rejected step when the work is ready for another review. Prior approvals are preserved.</div>
       ) : null}
       {unit.removedApprovalSteps.length > 0 ? (
         <div className="border-t border-[#e8ede8] bg-[#fafbfa] px-5 py-4">
