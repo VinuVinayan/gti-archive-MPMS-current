@@ -1,6 +1,6 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element */
+import { FileThumbnail } from "@/components/projects/file-thumbnail";
 
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
@@ -20,7 +20,6 @@ import {
   CheckCircle2,
   CircleDot,
   Download,
-  FileImage,
   FileStack,
   Info,
   Mail,
@@ -504,9 +503,7 @@ function ProductionUnitSwitcher({
           const selected = unit.id === selectedUnitId;
           return (
             <button key={unit.id} type="button" aria-pressed={selected} className={cn("flex min-w-[220px] items-center gap-3 rounded-[16px] border bg-white p-3 text-left shadow-[0_8px_22px_rgba(23,39,28,0.035)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4b9068]/40 lg:min-w-0", selected ? "border-[#70a383] bg-[#f3faf5] shadow-[0_12px_26px_rgba(42,112,73,0.09)]" : "border-[#dfe6df] hover:border-[#b7cbbd] hover:bg-[#fbfdfb]")} onClick={() => onSelect(unit.id)}>
-              <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-[12px] bg-[#edf5ef] text-[#347455]">
-                {unit.sourceMimeType.startsWith("image/") ? <img src={`/api/project-assets/${unit.sourceAttachmentId}/preview`} alt="" className="h-full w-full object-cover" /> : <FileImage className="h-5 w-5" />}
-              </span>
+              <FileThumbnail fileName={unit.rawFileName} mimeType={unit.sourceMimeType} previewPath={`/api/project-assets/${unit.sourceAttachmentId}/preview`} className="size-11 rounded-[12px]" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[12px] font-[740] text-[#253028]" title={unit.name}>{unit.name}</span>
                 {unit.rawFileName !== unit.name ? <span className="mt-0.5 block truncate text-[8px] text-[#8a948d]" title={unit.rawFileName}>{unit.rawFileName}</span> : null}
@@ -580,7 +577,7 @@ function SampleRoundsList({
                 <article key={round.id} className={cn("grid gap-4 px-4 py-4 transition lg:grid-cols-[50px_minmax(0,1.25fr)_minmax(0,1fr)_100px_128px_210px] lg:items-center lg:gap-3 lg:px-5", selected ? "bg-[#f4faf5]" : "hover:bg-[#fbfcfb]")}>
                   <div><span className="mb-1 block text-[8px] font-[760] uppercase text-[#8a948d] lg:hidden">Round</span><span className={cn("grid size-8 shrink-0 place-items-center rounded-full border text-[11px] font-[780]", selected ? "border-[#86b395] bg-[#e7f4ea] text-[#2d744d]" : "border-[#dce4dd] bg-[#f7f9f7] text-[#68746b]")}>{round.sequence}</span></div>
                   <div className="min-w-0"><span className="mb-1 block text-[8px] font-[760] uppercase text-[#8a948d] lg:hidden">Name / Type</span><h3 className="truncate text-[11px] font-[700] leading-4 text-[#29342c]">{round.name}</h3><p className="mt-0.5 truncate text-[9px] text-[#758078]">{round.type === ProductionSampleRoundType.CUSTOM ? round.customTypeName : ROUND_TYPE_LABELS[round.type]}</p></div>
-                  <div className="min-w-0"><span className="mb-1 block text-[8px] font-[760] uppercase text-[#8a948d] lg:hidden">Provider</span><p className="truncate text-[10px] font-[680] text-[#39443c]">{round.recipientCompany || round.recipientName || "Legacy request"}</p>{round.recipientEmail ? <p className="mt-0.5 truncate text-[8px] text-[#849087]">{round.recipientEmail}</p> : null}</div>
+                  <div className="min-w-0"><span className="mb-1 block text-[8px] font-[760] uppercase text-[#8a948d] lg:hidden">Provider</span><p className="min-w-0 whitespace-normal break-words text-[10px] font-[680] text-[#39443c]">{round.recipientCompany || round.recipientName || "Legacy request"}</p>{round.recipientEmail ? <p className="mt-0.5 truncate text-[8px] text-[#849087]">{round.recipientEmail}</p> : null}</div>
                   <div><span className="mb-1 block text-[8px] font-[760] uppercase text-[#8a948d] lg:hidden">Deadline</span><p className="text-[10px] font-[680] text-[#39443c]">{formatDate(round.deadline)}</p>{round.overdue ? <p className="mt-0.5 text-[8px] font-[700] text-[#bd473d]">{overdueLabel(round.deadline)}</p> : null}</div>
                   <div className="w-full min-w-0"><span className="mb-1 block text-[8px] font-[760] uppercase text-[#8a948d] lg:hidden">Status</span><ReceiptStatusBadge round={round} /></div>
                   <div className="w-full min-w-0">
@@ -839,7 +836,7 @@ function SampleRequestDetails({
           </section>
         ) : null}
         <section><h3 className="text-[10px] font-[760] uppercase tracking-[0.075em] text-[#657168]">Request Note</h3><div className="mt-2 rounded-[11px] border border-[#e2e8e2] bg-[#fafcfa] px-3 py-2.5"><RichTextContent value={round.requestNote} fallback={<p className="text-[10px] leading-4 text-[#4c584f]">No request note was added.</p>} className="text-[10px] leading-4 text-[#4c584f]" /></div></section>
-        <section><h3 className="text-[10px] font-[760] uppercase tracking-[0.075em] text-[#657168]">Production Files / References</h3><div className="mt-2 grid gap-2">{round.referenceFiles.length ? round.referenceFiles.map((file) => <a key={file.id} href={file.downloadPath} className="flex min-w-0 items-center gap-3 rounded-[11px] border border-[#e0e7e0] bg-[#fafcfa] px-3 py-2.5 text-[10px] text-[#354139] hover:bg-[#f3f8f4]"><FileImage className="h-4 w-4 shrink-0 text-[#4b7e5d]" /><span className="min-w-0 flex-1 truncate font-[680]">{file.name}</span><Download className="h-3.5 w-3.5 shrink-0" /></a>) : <p className="text-[10px] text-[#8a948d]">No reference files are available for this legacy request.</p>}</div></section>
+        <section><h3 className="text-[10px] font-[760] uppercase tracking-[0.075em] text-[#657168]">Production Files / References</h3><div className="mt-2 grid gap-2">{round.referenceFiles.length ? round.referenceFiles.map((file) => <a key={file.id} href={file.downloadPath} className="flex min-w-0 items-center gap-3 rounded-[11px] border border-[#e0e7e0] bg-[#fafcfa] px-3 py-2.5 text-[10px] text-[#354139] hover:bg-[#f3f8f4]"><FileThumbnail fileName={file.name} mimeType={file.mimeType} previewPath={`/api/project-assets/${file.id}/preview`} className="h-8 w-10" /><span className="min-w-0 flex-1 truncate font-[680]">{file.name}</span><Download className="h-3.5 w-3.5 shrink-0" /></a>) : <p className="text-[10px] text-[#8a948d]">No reference files are available for this legacy request.</p>}</div></section>
       </div>
       <ConfirmationDialog isOpen={confirm === PhysicalSampleDecision.ACCEPTED} title="Accept this physical sample?" description={`This will mark ${unit.name} as accepted for Stage 7 and lock further sample requests.`} confirmLabel="Accept Sample" pending={pending} onConfirm={decide} onClose={() => setConfirm(null)} />
       <ConfirmationDialog isOpen={confirm === PhysicalSampleDecision.REJECTED} title="Reject this physical sample?" description="The rejection and review note will remain as permanent history. You may then request another physical sample." confirmLabel="Reject Sample" tone="destructive" pending={pending} onConfirm={decide} onClose={() => setConfirm(null)} />

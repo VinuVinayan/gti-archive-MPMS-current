@@ -1,4 +1,4 @@
-import { AttachmentAssetType } from "@prisma/client";
+import { AttachmentAssetType, Prisma } from "@prisma/client";
 
 import {
   completeAttachmentUpload,
@@ -10,11 +10,13 @@ import {
 } from "@/lib/project-history";
 import {
   assertResearchFolderReadAccess,
+  assertResearchFolderUploadAccess,
   assertResearchFolderWriteAccess,
   getResearchFolderAccess,
 } from "@/lib/project-research-access";
 import { prisma, withPrismaRetry } from "@/lib/prisma";
 import { readTextObject } from "@/lib/storage/s3";
+import { getFolderSubtree } from "@/lib/project-folder-tree";
 
 const TEXT_FILE_PREVIEW_MAX_BYTES = 1024 * 1024;
 const TEXT_FILE_EXCERPT_MAX_BYTES = 6 * 1024;
@@ -30,7 +32,7 @@ export async function requestProjectResearchFileUpload(
     uploadEndpointMode?: RequestUploadInput["uploadEndpointMode"];
   },
 ) {
-  await assertResearchFolderWriteAccess(user, {
+  await assertResearchFolderUploadAccess(user, {
     projectId: input.projectId,
     folderId: input.folderId,
   });
@@ -55,7 +57,7 @@ export async function completeProjectResearchFileUpload(
     failed?: boolean;
   },
 ) {
-  await assertResearchFolderWriteAccess(user, {
+  await assertResearchFolderUploadAccess(user, {
     projectId: input.projectId,
     folderId: input.folderId,
   });
@@ -94,6 +96,7 @@ export async function completeProjectResearchFileUpload(
       select: {
         id: true,
         attachmentId: true,
+        pinnedAt: true, colorLabel: true,
         attachment: {
           select: {
             originalFileName: true,
@@ -113,6 +116,8 @@ export async function completeProjectResearchFileUpload(
 
   return {
     id: file.id,
+    pinnedAt: file.pinnedAt?.toISOString() ?? null,
+    colorLabel: file.colorLabel,
     attachmentId: file.attachmentId,
     name: file.attachment.originalFileName,
     mimeType: file.attachment.mimeType,
@@ -250,7 +255,6 @@ export async function deleteProjectResearchFolder(
         id: true,
         name: true,
         workspaceId: true,
-        files: { select: { attachmentId: true } },
       },
     }),
   );
@@ -259,23 +263,29 @@ export async function deleteProjectResearchFolder(
     return { error: "Folder not found." } as const;
   }
 
-  for (const file of folder.files) {
+  const hierarchy = await prisma.projectResearchFolder.findMany({
+    where: { workspaceId: access.workspaceId },
+    select: { id: true, name: true, parentFolderId: true },
+  });
+  const subtree = getFolderSubtree(hierarchy, folder.id);
+  const files = await prisma.projectResearchFolderFile.findMany({
+    where: { folderId: { in: subtree.map((child) => child.id) }, attachment: { status: { not: "DELETED" } } },
+    select: { attachmentId: true },
+  });
+  for (const file of files) {
     await deleteAttachmentForUser(user, file.attachmentId);
   }
 
-  const deleted = await withPrismaRetry(() =>
-    prisma.projectResearchFolder.deleteMany({
-      where: {
-        id: folder.id,
-        workspaceId: folder.workspaceId,
-        workspace: { projectId: input.projectId },
-      },
-    }),
-  );
-
-  if (deleted.count !== 1) {
-    return { error: "Folder could not be deleted." } as const;
-  }
+  await assertResearchFolderWriteAccess(user, input);
+  await prisma.$transaction(async (tx) => {
+    const ids = subtree.map((child) => child.id);
+    await tx.$queryRaw`SELECT "id" FROM "ProjectResearchFolder" WHERE "id" IN (${Prisma.join(ids)}) FOR UPDATE`;
+    const activeFiles = await tx.projectResearchFolderFile.count({ where: { folderId: { in: ids }, attachment: { status: { not: "DELETED" } } } });
+    if (activeFiles) throw new Error("Folder contents changed. Please reload and try again.");
+    for (const child of [...subtree].reverse()) {
+      await tx.projectResearchFolder.delete({ where: { id: child.id, workspaceId: access.workspaceId } });
+    }
+  });
 
   return { folder: { id: folder.id, name: folder.name } } as const;
 }

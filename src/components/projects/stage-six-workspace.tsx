@@ -1,5 +1,7 @@
 "use client";
 
+import { FileThumbnail } from "@/components/projects/file-thumbnail";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -45,6 +47,8 @@ import {
   reorderProductionApproverAction,
   prepareStageSixArchiveAction,
   retryProductionApprovalDispatchAction,
+  sendProductionApprovalRequestAction,
+  resendRejectedProductionApprovalAction,
   saveStageSixArchiveAction,
 } from "@/app/(dashboard)/projects/[slug]/stages/6/actions";
 import {
@@ -92,7 +96,6 @@ import type {
   StageSixUnitRecord,
   StageSixWorkspaceData,
 } from "@/lib/stage-six";
-import { STAGE_SIX_FIRST_APPROVER } from "@/lib/stage-six-constants";
 import { uploadProductionFile } from "@/lib/stage-six-upload-client";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -196,9 +199,12 @@ function UnitSwitcher({
                 : "border-[#dfe6df] hover:border-[#b9cbbd]",
             )}
           >
-            <span className="grid size-11 shrink-0 place-items-center rounded-[12px] bg-[#edf5ef] text-[#347455]">
-              <FileIcon file={unit.sourceFile} />
-            </span>
+            <FileThumbnail
+              fileName={unit.sourceFile.name}
+              mimeType={unit.sourceFile.mimeType}
+              previewPath={`/api/project-assets/${unit.sourceFile.id}/preview`}
+              className="size-11 rounded-[12px]"
+            />
             <span className="min-w-0">
               <strong className="block truncate text-[12px] font-[720] text-[#27322b]">{unit.name}</strong>
               <span className={cn("mt-1 inline-flex rounded-full px-2 py-0.5 text-[9px] font-[740]", unitStatusClass(unit.status))}>
@@ -373,13 +379,14 @@ function ProductionDetails({ unit }: { unit: StageSixUnitRecord }) {
   );
 }
 
-type ApproverDialogMode = "marketing-director" | "additional";
+type ApproverDialogMode = "marketing-director" | "additional" | { resendStepId: string };
 
 function ApproverDialog({
   mode,
   projectId,
   unit,
   participants,
+  marketingDirectorRecipient,
   onClose,
   onSaved,
 }: {
@@ -387,31 +394,28 @@ function ApproverDialog({
   projectId: string;
   unit: StageSixUnitRecord;
   participants: StageSixWorkspaceData["participants"];
+  marketingDirectorRecipient: StageSixWorkspaceData["marketingDirectorRecipient"];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [pending, startPending] = useTransition();
+  const isResend = typeof mode === "object";
+  const rejectedStep = typeof mode === "object" ? unit.approvalSteps.find((step) => step.id === mode.resendStepId) : null;
+  const [expectedDecidedAt] = useState(rejectedStep?.decidedAt);
   const requestId = useRef(crypto.randomUUID());
-  const fixedFirstApprover = mode === "marketing-director";
   const [recipientType, setRecipientType] = useState<ProductionApprovalRecipientType>(
-    fixedFirstApprover
-      ? ProductionApprovalRecipientType.EXTERNAL_EMAIL
-      : ProductionApprovalRecipientType.EXISTING_COLLABORATOR,
+    ProductionApprovalRecipientType.EXISTING_COLLABORATOR,
   );
   const [recipientUserId, setRecipientUserId] = useState("");
-  const [recipientName, setRecipientName] = useState(
-    fixedFirstApprover ? STAGE_SIX_FIRST_APPROVER.name : "",
-  );
-  const [recipientEmail, setRecipientEmail] = useState(
-    fixedFirstApprover ? STAGE_SIX_FIRST_APPROVER.email : "",
-  );
-  const [fieldKeys, setFieldKeys] = useState<string[]>([]);
+  const [recipientName, setRecipientName] = useState("");
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [fieldKeys, setFieldKeys] = useState<string[]>(rejectedStep?.sharedFieldKeys ?? []);
   const availableFiles = [unit.sourceFile, ...unit.productionFiles];
-  const [fileIds, setFileIds] = useState<string[]>(availableFiles.map((file) => file.id));
-  const [message, setMessage] = useState("");
+  const [fileIds, setFileIds] = useState<string[]>(rejectedStep?.selectedFileIds ?? availableFiles.map((file) => file.id));
+  const [message, setMessage] = useState(rejectedStep?.message ?? "");
   const autosave = useProjectFormAutosave({
     projectId,
-    formKey: `stage-six-approver:${unit.id}:${mode}`,
+    formKey: `stage-six-approver:${unit.id}:${typeof mode === "object" ? `resend:${mode.resendStepId}:${expectedDecidedAt}` : mode}:manual`,
     value: {
       recipientType,
       recipientUserId,
@@ -432,13 +436,19 @@ function ApproverDialog({
     },
   });
   const allSelected = fieldKeys.length === STAGE_FIVE_FIELD_DEFINITIONS.length && fileIds.length === availableFiles.length;
-  const recipientReady = recipientType === ProductionApprovalRecipientType.EXISTING_COLLABORATOR
+  const isMarketingDirector = mode === "marketing-director" || Boolean(rejectedStep?.isMarketingDirectorRequired);
+  const recipientReady = isResend
+    ? Boolean(rejectedStep?.status === ProductionApprovalStepStatus.REJECTED && rejectedStep.decidedAt === expectedDecidedAt &&
+        (isMarketingDirector ? marketingDirectorRecipient.email : rejectedStep.recipientEmail))
+    : mode === "marketing-director"
+    ? Boolean(marketingDirectorRecipient.email)
+    : recipientType === ProductionApprovalRecipientType.EXISTING_COLLABORATOR
     ? Boolean(recipientUserId)
     : /^\S+@\S+\.\S+$/.test(recipientEmail.trim());
   const canSubmit =
     recipientReady &&
     (fieldKeys.length > 0 || fileIds.length > 0) &&
-    (mode !== "marketing-director" || fileIds.length > 0);
+    (!isMarketingDirector || fileIds.length > 0);
   const closeWithAutosave = () => {
     void autosave.flush().finally(onClose);
   };
@@ -450,6 +460,27 @@ function ApproverDialog({
   function save() {
     if (!canSubmit || pending) return;
     startPending(async () => {
+      if (isResend && rejectedStep && expectedDecidedAt) {
+        try {
+          const result = await resendRejectedProductionApprovalAction({
+            projectId, productionUnitId: unit.id, stepId: rejectedStep.id,
+            expectedDecidedAt,
+            sharedFieldKeys: fieldKeys as never[], selectedFileIds: fileIds, message,
+          });
+          if ("error" in result) {
+            showErrorToast("Unable to resend approval.", result.error);
+            onSaved();
+            return;
+          }
+          await autosave.clearDraft().catch(() => undefined);
+          showSuccessToast(result.sent ? "Approval request resent." : "This rejection has already been resubmitted.");
+          onSaved();
+          onClose();
+        } catch {
+          showErrorToast("Unable to resend approval.", "Refresh and try again.");
+        }
+        return;
+      }
       const payload = {
         clientRequestId: requestId.current,
         projectId,
@@ -470,7 +501,7 @@ function ApproverDialog({
         return;
       }
       await autosave.clearDraft().catch(() => undefined);
-      showSuccessToast(mode === "marketing-director" ? "Marketing Director approval requested." : "Approver added to the approval chain.");
+      showSuccessToast("Approver saved. Use Send Approval Request when ready.");
       onSaved();
       onClose();
     });
@@ -483,58 +514,56 @@ function ApproverDialog({
           <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[#e7ece8] px-5 py-4 sm:px-6 sm:py-5">
             <div>
               <p className="text-[10px] font-[760] uppercase tracking-[.12em] text-[#4c795e]">Approval Chain</p>
-              <h2 id="add-approver-title" className="mt-1.5 text-[20px] font-[760] text-[#162019] sm:text-[22px]">{mode === "marketing-director" ? "Assign Marketing Director" : "Add Approver"}</h2>
+              <h2 id="add-approver-title" className="mt-1.5 text-[20px] font-[760] text-[#162019] sm:text-[22px]">{isResend ? "Resend Approval Request" : mode === "marketing-director" ? "Assign Marketing Director" : "Add Approver"}</h2>
+              {isResend ? <p className="mt-2 text-[11px] leading-5 text-[#727d75]">Choose the files and information to send again. Rejection history and prior approvals will be kept. Later requests still require a separate click.</p> : null}
               {mode === "marketing-director" ? <p className="mt-1 text-[11px] font-[700] text-[#9a6a22]">Initial approval role</p> : null}
             </div>
-            <Button type="button" variant="secondary" size="icon" aria-label="Close approval request" onClick={closeWithAutosave}><X className="h-4 w-4" /></Button>
+            <Button type="button" variant="secondary" size="icon" disabled={pending} aria-label="Close approval request" onClick={closeWithAutosave}><X className="h-4 w-4" /></Button>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6 sm:py-5">
-            {fixedFirstApprover ? (
-              <div className="rounded-[14px] border border-[#cfe1d4] bg-[#f4faf5] px-4 py-3">
-                <p className="text-[10px] font-[760] uppercase tracking-[.08em] text-[#55725f]">
-                  Initial approver
-                </p>
-                <p className="mt-1 text-[13px] font-[740] text-[#243229]">
-                  {STAGE_SIX_FIRST_APPROVER.name}
-                </p>
-                <p className="mt-0.5 text-[11px] text-[#607068]">
-                  {STAGE_SIX_FIRST_APPROVER.email}
+            {isMarketingDirector || isResend ? (
+              <div className="rounded-[14px] border border-[#dfe6df] bg-[#f7faf7] p-4">
+                <p className="text-[12px] font-[720] text-[#27322b]">{isMarketingDirector ? marketingDirectorRecipient.name : rejectedStep?.recipientName}</p>
+                <p className="mt-1 break-words text-[11px] text-[#66736a]">
+                  {(isMarketingDirector ? marketingDirectorRecipient.email : rejectedStep?.recipientEmail) || "Approval email is not configured. Contact an administrator."}
                 </p>
               </div>
             ) : (
-            <fieldset>
-              <legend className="text-[12px] font-[720] text-[#2d372f]">Recipient Type</legend>
-              <div className="mt-2 flex flex-wrap gap-3">
-                {[
-                  [ProductionApprovalRecipientType.EXISTING_COLLABORATOR, "Project Participant"],
-                  [ProductionApprovalRecipientType.EXTERNAL_EMAIL, "External Email"],
-                ].map(([value, label]) => (
-                  <label key={value} className="flex items-center gap-2 rounded-[11px] border border-[#dfe6df] bg-white px-3 py-2 text-[11px] font-[650] text-[#455149]">
-                    <input type="radio" checked={recipientType === value} onChange={() => setRecipientType(value as ProductionApprovalRecipientType)} /> {label}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-            )}
+              <>
+                <fieldset>
+                  <legend className="text-[12px] font-[720] text-[#2d372f]">Recipient Type</legend>
+                  <div className="mt-2 flex flex-wrap gap-3">
+                    {[
+                      [ProductionApprovalRecipientType.EXISTING_COLLABORATOR, "Project Participant"],
+                      [ProductionApprovalRecipientType.EXTERNAL_EMAIL, "External Email"],
+                    ].map(([value, label]) => (
+                      <label key={value} className="flex items-center gap-2 rounded-[11px] border border-[#dfe6df] bg-white px-3 py-2 text-[11px] font-[650] text-[#455149]">
+                        <input type="radio" checked={recipientType === value} onChange={() => setRecipientType(value as ProductionApprovalRecipientType)} /> {label}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
 
-            {!fixedFirstApprover && recipientType === ProductionApprovalRecipientType.EXISTING_COLLABORATOR ? (
-              <Select value={recipientUserId} onValueChange={setRecipientUserId}>
-                <SelectTrigger className="mt-3 h-11 w-full rounded-[12px] border-[#dfe6df] bg-white" aria-label="Select project collaborator"><SelectValue placeholder="Search/select project collaborator" /></SelectTrigger>
-                <SelectContent className="z-[190]">{participants.map((participant) => <SelectItem key={participant.id} value={participant.id}>{participant.name} — {participant.role}</SelectItem>)}</SelectContent>
-              </Select>
-            ) : !fixedFirstApprover ? (
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <label className="space-y-1.5">
-                  <span className="text-[11px] font-[700] text-[#3f4b43]">Name</span>
-                  <Input value={recipientName} placeholder="Enter recipient name" className="rounded-[12px] border-[#c8d5cb] bg-[#fbfdfb] shadow-none focus-visible:border-[#46906a] focus-visible:ring-[#46906a]/15" onChange={(event) => setRecipientName(event.target.value)} />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="text-[11px] font-[700] text-[#3f4b43]">Email</span>
-                  <Input type="email" value={recipientEmail} placeholder="name@example.com" className="rounded-[12px] border-[#c8d5cb] bg-[#fbfdfb] shadow-none focus-visible:border-[#46906a] focus-visible:ring-[#46906a]/15" onChange={(event) => setRecipientEmail(event.target.value)} />
-                </label>
-              </div>
-            ) : null}
+                {recipientType === ProductionApprovalRecipientType.EXISTING_COLLABORATOR ? (
+                  <Select value={recipientUserId} onValueChange={setRecipientUserId}>
+                    <SelectTrigger className="mt-3 h-11 w-full rounded-[12px] border-[#dfe6df] bg-white" aria-label="Select project collaborator"><SelectValue placeholder="Search/select project collaborator" /></SelectTrigger>
+                    <SelectContent className="z-[190]">{participants.map((participant) => <SelectItem key={participant.id} value={participant.id}>{participant.name} — {participant.role}</SelectItem>)}</SelectContent>
+                  </Select>
+                ) : (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <label className="space-y-1.5">
+                      <span className="text-[11px] font-[700] text-[#3f4b43]">Name</span>
+                      <Input value={recipientName} placeholder="Enter recipient name" className="rounded-[12px] border-[#c8d5cb] bg-[#fbfdfb] shadow-none focus-visible:border-[#46906a] focus-visible:ring-[#46906a]/15" onChange={(event) => setRecipientName(event.target.value)} />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-[11px] font-[700] text-[#3f4b43]">Email</span>
+                      <Input type="email" value={recipientEmail} placeholder="name@example.com" className="rounded-[12px] border-[#c8d5cb] bg-[#fbfdfb] shadow-none focus-visible:border-[#46906a] focus-visible:ring-[#46906a]/15" onChange={(event) => setRecipientEmail(event.target.value)} />
+                    </label>
+                  </div>
+                )}
+              </>
+            )}
 
             <div className="mt-5 flex items-center justify-between gap-3">
               <h3 className="text-[12px] font-[720] text-[#2d372f]">Information to share</h3>
@@ -576,7 +605,7 @@ function ApproverDialog({
           <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-[#e7ece8] bg-white px-5 py-4 sm:flex-row sm:items-center sm:px-6">
             <Button type="button" className="w-full sm:w-auto" variant="secondary" disabled={pending} onClick={closeWithAutosave}>Cancel</Button>
             <ProjectFormAutosaveStatus status={autosave.status} savedAt={autosave.savedAt} restoredAt={autosave.restoredAt} onRetry={() => void autosave.retry()} className="sm:mr-auto" />
-            <Button type="button" className="w-full sm:w-auto" disabled={!canSubmit || pending} onClick={save}><Plus className="h-4 w-4" /> {pending ? "Saving..." : mode === "marketing-director" ? "Assign & Request Approval" : "Add Approver"}</Button>
+            <Button type="button" className="w-full sm:w-auto" disabled={!canSubmit || pending} onClick={save}>{isResend ? <Send className="h-4 w-4" /> : <Plus className="h-4 w-4" />} {pending ? isResend ? "Sending..." : "Saving..." : isResend ? "Resend Approval Request" : "Save Approver"}</Button>
           </div>
         </CardContent>
       </Card>
@@ -587,7 +616,7 @@ function ApproverDialog({
 function ApprovalBadge({ status, dispatch }: { status: ProductionApprovalStepStatus; dispatch: ProductionDispatchStatus }) {
   const label = status === ProductionApprovalStepStatus.ACTIVE
     ? dispatch === ProductionDispatchStatus.FAILED ? "Delivery Failed" : "Pending"
-    : status === ProductionApprovalStepStatus.WAITING ? "Waiting" : status === ProductionApprovalStepStatus.APPROVED ? "Approved" : "Rejected";
+    : status === ProductionApprovalStepStatus.WAITING ? "Not sent" : status === ProductionApprovalStepStatus.APPROVED ? "Approved" : "Rejected";
   return <span className={cn("inline-flex rounded-full px-2.5 py-1 text-[9px] font-[750]", label === "Approved" ? "bg-[#e4f2e7] text-[#2e744e]" : label === "Rejected" || label === "Delivery Failed" ? "bg-[#fde9e6] text-[#a54b43]" : "bg-[#fff3df] text-[#94651f]")}>{label}</span>;
 }
 
@@ -620,6 +649,42 @@ function ApprovalSection({
   const [removing, startRemoving] = useTransition();
   const stepToRemove = unit.approvalSteps.find((step) => step.id === stepToRemoveId);
 
+  const [sendTargetId, setSendTargetId] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [sending, startSending] = useTransition();
+  const nextStep = unit.approvalSteps.find((step) => step.status === ProductionApprovalStepStatus.WAITING);
+  const sendTarget = unit.approvalSteps.find((step) => step.id === sendTargetId);
+  const canSend = canManage && chainIsEditable && Boolean(nextStep?.isConfigured) &&
+    rejected === 0 && !unit.approvalSteps.some((step) => step.status === ProductionApprovalStepStatus.ACTIVE);
+
+  function sendRequest() {
+    if (!canSend || !sendTarget || sendTarget.id !== nextStep?.id || sending) return;
+    setSendError(null);
+    startSending(async () => {
+      try {
+        const result = await sendProductionApprovalRequestAction({
+          projectId, productionUnitId: unit.id, stepId: sendTarget.id,
+        });
+        if ("error" in result) {
+          setSendError(result.error);
+          onRefresh();
+          return;
+        }
+        showSuccessToast(result.sent ? "Approval request sent." : "This approval request has already been sent.");
+        setSendTargetId(null);
+        onRefresh();
+      } catch {
+        setSendError("Unable to send this approval request. Please try again.");
+      }
+    });
+  }
+
+  function openSendDialog() {
+    if (!canSend || !nextStep) return;
+    setSendError(null);
+    setSendTargetId(nextStep.id);
+  }
+
   function remove() {
     if (!stepToRemoveId || removing) return;
     setRemoveError(null);
@@ -635,12 +700,7 @@ function ApprovalSection({
         showErrorToast("Unable to remove approver.", message);
         return;
       }
-      showSuccessToast(
-        "Approver removed.",
-        "dispatchError" in result
-          ? `The next approval is ready, but its email failed: ${result.dispatchError}`
-          : undefined,
-      );
+      showSuccessToast("Approver removed. Any remaining requests must be sent manually.");
       setStepToRemoveId(null);
       onRefresh();
     });
@@ -678,9 +738,14 @@ function ApprovalSection({
       <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
         <div>
           <h2 className="text-[17px] font-[750] text-[#1c271f]">Approval Chain</h2>
-          <p className="mt-1 text-[11px] text-[#727d75]">Strictly sequential and scoped independently to this Production Unit.</p>
+          <p className="mt-1 text-[11px] text-[#727d75]">Requests follow the chain order. Click Send Approval Request for each approver; requests are never sent automatically.</p>
         </div>
-        {canManage && chainIsEditable ? <Button type="button" variant="outline" size="sm" onClick={() => onOpenDialog("additional")}><Plus className="h-4 w-4" /> Add Approver</Button> : null}
+        {canManage && chainIsEditable ? (
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" disabled={sending} onClick={() => onOpenDialog("additional")}><Plus className="h-4 w-4" /> Add Approver</Button>
+            {nextStep ? <Button type="button" size="sm" disabled={!canSend || sending || removing} onClick={openSendDialog}><Send className="h-4 w-4" /> Send Approval Request</Button> : null}
+          </div>
+        ) : null}
       </div>
       <div className="grid grid-cols-2 gap-2 border-y border-[#e8ede8] bg-[#fbfcfb] p-4 sm:grid-cols-4">
         {[["Total Approvers", unit.approvalSteps.length], ["Approved", approved], ["Pending", pending], ["Rejected", rejected]].map(([label, value]) => <div key={label} className="rounded-[11px] bg-white px-3 py-2"><strong className="block text-[14px] text-[#26312a]">{value}</strong><span className="text-[9px] text-[#78837b]">{label}</span></div>)}
@@ -695,16 +760,26 @@ function ApprovalSection({
           <div key={step.id} className="grid gap-3 border-b border-[#e8ede8] px-5 py-4 last:border-b-0 sm:grid-cols-[44px_minmax(0,1fr)_auto_auto] sm:items-center">
             <span className="grid size-9 place-items-center rounded-[10px] border border-[#dfe6df] bg-[#f8faf8] text-[12px] font-[740]">{index + 1}</span>
             <div className="min-w-0">
-              <p className="truncate text-[12px] font-[720] text-[#27322b]">{step.isMarketingDirectorRequired ? "Marketing Director" : step.recipientName}</p>
-              <p className="mt-1 truncate text-[10px] text-[#77827a]">{step.recipientType ? `${step.recipientName}${step.recipientEmail ? ` · ${step.recipientEmail}` : ""}` : "Recipient not assigned"}</p>
+              <p className="min-w-0 whitespace-normal break-words text-[12px] font-[720] text-[#27322b]">{step.isMarketingDirectorRequired ? "Marketing Director" : step.recipientName}</p>
+              <p className="mt-1 min-w-0 whitespace-normal break-words text-[10px] text-[#77827a]">{step.recipientType || step.isMarketingDirectorRequired ? `${step.recipientName}${step.recipientEmail ? ` · ${step.recipientEmail}` : ""}` : "Recipient not assigned"}</p>
               {step.failureMessage ? <p className="mt-1 text-[10px] text-[#a54b43]">{step.failureMessage}</p> : null}
               {step.decisionComment ? <p className="mt-1 text-[10px] italic text-[#657168]">“{step.decisionComment}”</p> : null}
+              {step.rejectionHistory.length ? <details className="mt-2 text-[10px] text-[#657168]">
+                <summary className="cursor-pointer font-semibold">Previous rejections ({step.rejectionHistory.length})</summary>
+                <ul className="mt-2 space-y-2">{step.rejectionHistory.map((entry) => <li key={entry.decidedAt}>
+                  <p>{entry.recipientName} · Rejected {new Date(entry.decidedAt).toLocaleString()}</p>
+                  {entry.decisionComment ? <p className="mt-1 whitespace-pre-wrap italic">“{entry.decisionComment}”</p> : null}
+                  <p className="mt-1">Request resent {new Date(entry.resentAt).toLocaleString()}</p>
+                </li>)}</ul>
+              </details> : null}
             </div>
             <ApprovalBadge status={step.status} dispatch={step.dispatchStatus} />
             <div className="flex justify-end gap-1">
               {step.reviewHref ? <Button asChild type="button" size="sm"><Link href={step.reviewHref}><ShieldCheck className="h-3.5 w-3.5" /> Review Approval</Link></Button> : null}
               {canManage && step.sequence === 1 && !step.isConfigured && chainIsEditable ? <Button type="button" size="sm" onClick={() => onOpenDialog("marketing-director")}><ShieldCheck className="h-3.5 w-3.5" /> Assign</Button> : null}
-              {canManage && step.dispatchStatus === ProductionDispatchStatus.FAILED && step.status === ProductionApprovalStepStatus.ACTIVE ? <Button type="button" variant="outline" size="sm" onClick={() => retry(step.id)}><RefreshCw className="h-3.5 w-3.5" /> Retry</Button> : null}
+              {canSend && nextStep?.id === step.id ? <Button type="button" size="sm" disabled={sending || removing} onClick={openSendDialog}><Send className="h-3.5 w-3.5" /> Send Approval Request</Button> : null}
+              {canManage && chainIsEditable && step.status === ProductionApprovalStepStatus.REJECTED ? <Button type="button" size="sm" disabled={sending || removing} onClick={() => onOpenDialog({ resendStepId: step.id })}><RefreshCw className="h-3.5 w-3.5" /> Resend Approval Request</Button> : null}
+              {canManage && chainIsEditable && step.dispatchStatus === ProductionDispatchStatus.FAILED && step.status === ProductionApprovalStepStatus.ACTIVE ? <Button type="button" variant="outline" size="sm" onClick={() => retry(step.id)}><RefreshCw className="h-3.5 w-3.5" /> Retry</Button> : null}
               {canManage && chainIsEditable && reorderableSteps.some((candidate) => candidate.id === step.id) ? (
                 <>
                   <Button type="button" variant="ghost" size="icon" aria-label={`Move approval step ${index + 1} up`} disabled={reorderableSteps[0]?.id === step.id} onClick={() => reorder(step.id, "UP")}><ArrowUp className="h-4 w-4" /></Button>
@@ -718,7 +793,7 @@ function ApprovalSection({
         {unit.approvalSteps.length === 0 ? <p className="px-5 py-7 text-center text-[11px] text-[#77827a]">No active approvers. Approval is not required unless an approver is added before handover.</p> : null}
       </div>
       {unit.status === ProjectProductionUnitStatus.REJECTED ? (
-        <div className="flex gap-2 border-t border-[#f0d5d1] bg-[#fff7f5] px-5 py-4 text-[11px] leading-5 text-[#9b5149]"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />The chain stopped at rejection. Prior approvals are preserved. Restart Approval Chain is intentionally deferred.</div>
+        <div className="flex gap-2 border-t border-[#f0d5d1] bg-[#fff7f5] px-5 py-4 text-[11px] leading-5 text-[#9b5149]"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />The chain stopped at rejection. Use Resend Approval Request on the rejected step when the work is ready for another review. Prior approvals are preserved.</div>
       ) : null}
       {unit.removedApprovalSteps.length > 0 ? (
         <div className="border-t border-[#e8ede8] bg-[#fafbfa] px-5 py-4">
@@ -727,7 +802,7 @@ function ApprovalSection({
             {unit.removedApprovalSteps.map((step) => (
               <div key={step.id} className="flex flex-wrap items-center justify-between gap-2 rounded-[11px] border border-[#e3e8e4] bg-white px-3 py-2.5">
                 <div className="min-w-0">
-                  <p className="truncate text-[11px] font-[700] text-[#465149]">Step {step.sequence} · {step.recipientName}</p>
+                  <p className="min-w-0 whitespace-normal break-words text-[11px] font-[700] text-[#465149]">Step {step.sequence} · {step.recipientName}</p>
                   <p className="mt-0.5 text-[9px] text-[#7b857e]">Removed{step.removedByName ? ` by ${step.removedByName}` : ""}{step.removedAt ? ` · ${new Date(step.removedAt).toLocaleString()}` : ""}</p>
                   {step.decisionComment ? <p className="mt-1 text-[10px] italic text-[#657168]">“{step.decisionComment}”</p> : null}
                 </div>
@@ -737,6 +812,26 @@ function ApprovalSection({
           </div>
         </div>
       ) : null}
+      <ConfirmationDialog
+        isOpen={Boolean(sendTargetId)}
+        title="Send Approval Request?"
+        description={sendTarget ? `Send an approval request for “${unit.name}” to ${sendTarget.recipientName}${sendTarget.recipientEmail ? ` (${sendTarget.recipientEmail})` : ""}? Later requests will wait for another click.` : "This approval request is no longer available."}
+        confirmLabel="Send Approval Request"
+        pendingLabel="Sending…"
+        pending={sending}
+        confirmDisabled={!canSend || sendTarget?.id !== nextStep?.id}
+        error={sendError ?? undefined}
+        onConfirm={sendRequest}
+        onClose={() => { if (!sending) setSendTargetId(null); }}
+      >
+        {sendTarget ? <div className="mb-5 max-h-48 overflow-y-auto rounded-xl border border-[#dfe6df] bg-[#f8faf8] p-4 text-xs text-[#455149]">
+          <p className="font-semibold">Information shared with this approver</p>
+          <ul className="mt-2 list-inside list-disc space-y-1 break-words">
+            {[unit.sourceFile, ...unit.productionFiles].filter((file) => sendTarget.selectedFileIds.includes(file.id)).map((file) => <li key={file.id}>{file.name}</li>)}
+            {STAGE_FIVE_FIELD_DEFINITIONS.filter((field) => sendTarget.sharedFieldKeys.includes(field.key)).map((field) => <li key={field.key}>{field.title}</li>)}
+          </ul>
+        </div> : null}
+      </ConfirmationDialog>
       <ConfirmationDialog
         isOpen={Boolean(stepToRemove)}
         title="Remove approver?"
@@ -1243,13 +1338,12 @@ function StageSixArchiveDialog({
                   className="group grid overflow-hidden rounded-[20px] border border-[#dfe6df] bg-white shadow-[0_8px_24px_rgba(25,45,31,.035)] transition hover:border-[#cadbce] hover:shadow-[0_14px_34px_rgba(25,45,31,.07)] lg:grid-cols-[minmax(0,1fr)_minmax(320px,.82fr)]"
                 >
                   <div className="flex min-w-0 gap-3 p-4 sm:p-5">
-                    <span className="grid size-12 shrink-0 place-items-center rounded-[15px] border border-[#dce9df] bg-[linear-gradient(145deg,#f3faf5,#e7f3ea)] text-[#2b7650]">
-                      {file.mimeType.startsWith("image/") ? (
-                        <FileImage className="h-5 w-5" />
-                      ) : (
-                        <FileText className="h-5 w-5" />
-                      )}
-                    </span>
+                    <FileThumbnail
+                      fileName={file.originalFileName}
+                      mimeType={file.mimeType}
+                      previewPath={file.previewPath}
+                      className="size-12 rounded-[15px]"
+                    />
                     <div className="min-w-0 pt-0.5">
                       <p
                         className="truncate text-[13px] font-[780] text-[#1b271f]"
@@ -1642,7 +1736,7 @@ export function StageSixWorkspace({
         </div>
       </CardContent></Card>
 
-      {activeUnit && approverDialog ? <ApproverDialog mode={approverDialog} projectId={project.id} unit={activeUnit} participants={pageData.participants} onClose={() => setApproverDialog(null)} onSaved={refresh} /> : null}
+      {activeUnit && approverDialog ? <ApproverDialog mode={approverDialog} projectId={project.id} unit={activeUnit} participants={pageData.participants} marketingDirectorRecipient={pageData.marketingDirectorRecipient} onClose={() => setApproverDialog(null)} onSaved={refresh} /> : null}
       {activeUnit && handoverDialog ? <HandoverDialog projectId={project.id} unit={activeUnit} recipients={pageData.handoverRecipients} onClose={() => setHandoverDialog(false)} onSaved={refresh} /> : null}
       {archivePreparation ? (
         <StageSixArchiveDialog

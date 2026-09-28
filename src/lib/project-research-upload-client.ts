@@ -1,5 +1,9 @@
+import type { FolderColor } from "@/lib/project-folder-colors-shared";
+
 export type ResearchUploadedFile = {
   id: string;
+  pinnedAt: string | null;
+  colorLabel: FolderColor | null;
   attachmentId: string;
   name: string;
   mimeType: string;

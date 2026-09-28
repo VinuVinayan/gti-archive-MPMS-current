@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.project-research-integration.json",
+  "compilerOptions": { "outDir": "../.tmp/project-research-import" },
+  "include": ["project-research-import-check.ts"]
+}

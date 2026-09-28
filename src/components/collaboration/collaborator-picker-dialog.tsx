@@ -152,7 +152,7 @@ export function CollaboratorPickerDialog({
                       {getInitials(collaborator.name)}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[15px] font-[600] text-[#1f2923]">
+                      <p className="min-w-0 whitespace-normal break-words text-[15px] font-[600] text-[#1f2923]">
                         {collaborator.name}
                       </p>
                       <p className="truncate text-[12px] text-[#7f877f]">

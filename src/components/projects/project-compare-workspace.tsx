@@ -1325,7 +1325,7 @@ export function ProjectCompareWorkspace({
                         <p className="mt-1 truncate text-[12px] font-[700] text-[#111712]">
                           {submission.originalFileName}
                         </p>
-                        <p className="mt-0.5 truncate text-[10px] text-[#687169]">
+                        <p className="mt-0.5 min-w-0 whitespace-normal break-words text-[10px] text-[#687169]">
                           {submission.uploadedBy} · {submission.uploadedAt}
                         </p>
                       </div>

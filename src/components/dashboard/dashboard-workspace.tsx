@@ -488,7 +488,7 @@ function FlexibleProjectsOverview({
                     <span className="block text-[9px] font-medium text-[#8a928c]">
                       Owner
                     </span>
-                    <span className="block truncate text-[10px] font-semibold text-[#3a433d]">
+                    <span className="block min-w-0 whitespace-normal break-words text-[10px] font-semibold text-[#3a433d]">
                       {project.ownerName}
                     </span>
                   </span>
@@ -595,7 +595,7 @@ function RecentProjects({
                     <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#e8d3c0] text-[8px] font-bold text-[#8c5d38]">
                       {project.ownerInitials}
                     </span>
-                    <span className="truncate">{project.ownerName}</span>
+                    <span className="min-w-0 whitespace-normal break-words">{project.ownerName}</span>
                   </span>
                   <span className="truncate text-[#69716b]">{project.updatedLabel}</span>
                   <ArrowRight className="h-3.5 w-3.5 text-[#626a64] transition-transform group-hover:translate-x-0.5" />

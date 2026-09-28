@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
+const fileThumbnail = await readFile("src/components/projects/file-thumbnail.tsx", "utf8");
+
 const [workspace, folderWorkspace, dashboardShell, privateFolderPage, sharedFolderPage, assetPreview, page, folderPage, actions, service, access, files, storage, uploadClient, textFile, migration, schema, overview, uploadRoute, completeRoute, deleteRoute, downloadRoute] = await Promise.all([
   readFile("src/components/projects/stage-two-workspace.tsx", "utf8"),
   readFile("src/components/projects/stage-two-folder-workspace.tsx", "utf8"),
@@ -63,7 +65,7 @@ assert(
   workspace.includes("data.myPrivateFolder.href") &&
     workspace.includes("data.classifiedFolders.map") &&
     workspace.includes('LockKeyhole className="h-8 w-8"') &&
-    service.includes("projectPrivateFolder.findUnique") &&
+    service.includes("projectPrivateFolder.findFirst") &&
     !service.includes("projectPrivateFolder.findMany"),
   "Stage 2 private-folder cards must expose only the current participant's folder and classified placeholders.",
 );
@@ -102,7 +104,7 @@ assert(
 );
 assert(!workspace.includes("predefinedFolders") && !workspace.includes("setCustomFolders"), "Folder cards must not use mock/local folder state.");
 assert(
-  workspace.includes("<FolderArtwork />") &&
+  workspace.includes("<FolderArtwork colorLabel={folder.colorLabel} />") &&
     workspace.includes("<FolderArtwork action") &&
     !workspace.includes("custom={!folder.isSystem}"),
   "Persisted system and custom folders must share one folder treatment while New Folder remains distinct.",
@@ -155,7 +157,7 @@ assert(
   "Opened folders must default to Grid and persist the Grid/List preference locally.",
 );
 assert(
-  folderWorkspace.includes("<Image") &&
+  folderWorkspace.includes("<FileThumbnail") &&
     folderWorkspace.includes("/api/project-assets/${file.attachmentId}/preview") &&
     folderWorkspace.includes("visualStyles") &&
     folderWorkspace.includes("getExtension(file.name)"),
@@ -163,13 +165,13 @@ assert(
 );
 assert(
   assetPreview.includes("export function AssetImageThumbnail") &&
-    assetPreview.includes('mimeType.startsWith("image/")') &&
-    assetPreview.includes("src={previewPath}") &&
-    assetPreview.includes('loading="lazy"') &&
+    fileThumbnail.includes('mimeType.startsWith("image/")') &&
+    fileThumbnail.includes("src={source}") &&
+    fileThumbnail.includes('loading="lazy"') &&
     assetPreview.includes('aria-label={`Preview image ${fileName}`}') &&
     assetPreview.includes("onClick={() => setOpen(true)}") &&
     assetPreview.includes("h-10 w-14 shrink-0 overflow-hidden") &&
-    assetPreview.includes('className="h-full w-full object-contain"'),
+    assetPreview.includes("<FileThumbnail") && fileThumbnail.includes("h-full w-full object-contain"),
   "The shared project preview control must provide a small, uncropped, clickable image thumbnail for document visual areas.",
 );
 assert(
@@ -182,7 +184,7 @@ assert(
 assert(
   folderWorkspace.includes("grid-cols-[repeat(auto-fill,minmax(min(100%,210px),1fr))]") &&
     folderWorkspace.includes("truncate") &&
-    folderWorkspace.includes("Search files in this folder") &&
+    folderWorkspace.includes("Search folders and files") &&
     ["Newest", "Oldest", "Name (A–Z)", "Name (Z–A)"].every((label) =>
       folderWorkspace.includes(label),
     ),
@@ -278,7 +280,7 @@ assert(
   "Text-file creation must retain both UI and server-side Stage 2 write authorization.",
 );
 assert(
-  folderWorkspace.includes("No files yet") &&
+  folderWorkspace.includes("This folder is empty") &&
     folderWorkspace.includes("Drag files here or use New") &&
     folderWorkspace.includes("setFiles((current) => [uploadedFile as FolderFile, ...current])") &&
     !folderWorkspace.includes("router.refresh"),
@@ -325,7 +327,7 @@ assert(
 assert(schema.includes("model ProjectResearchWorkspace") && schema.includes("model ProjectResearchFolder") && schema.includes("model ProjectResearchFolderFile"), "Stage 2 Prisma models are missing.");
 assert(migration.includes("ON CONFLICT") && migration.includes('FROM "ProjectCollaborator"'), "Migration participant backfill must be idempotent and include ProjectCollaborator.");
 assert(migration.includes("'workflow:' || project.\"id\"") && migration.includes('ON CONFLICT ("projectId", "stageKey") DO NOTHING'), "Stage 2 migration must reconcile missing fixed-workflow rows idempotently.");
-assert(!schema.includes("parentFolderId") && !migration.includes('ALTER TABLE "ProjectStage"'), "Stage 2 must remain flat and must not mutate legacy ProjectStage.");
+assert(schema.includes("parentFolderId") && folderWorkspace.includes("data.ancestors.map") && folderWorkspace.includes("New Folder") && !migration.includes('ALTER TABLE "ProjectStage"'), "Stage 2 must support nested folders and breadcrumb navigation without changing legacy ProjectStage.");
 assert(
   !schema.includes("model TextDocument") && !schema.includes("model Note"),
   "Plain-text files must not introduce a separate note or document model.",

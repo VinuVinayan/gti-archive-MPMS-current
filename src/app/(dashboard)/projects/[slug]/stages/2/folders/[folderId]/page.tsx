@@ -1,6 +1,3 @@
-import { UserRole } from "@prisma/client";
-import { redirect } from "next/navigation";
-
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { ProjectAccessUnavailableState } from "@/components/projects/project-route-state";
 import { StageTwoFolderWorkspace } from "@/components/projects/stage-two-folder-workspace";
@@ -16,10 +13,6 @@ export default async function ProjectResearchFolderPage({
   const { slug, folderId: encodedFolderId } = await params;
   const folderId = decodeRouteParam(encodedFolderId);
   const user = await requireUser();
-
-  if (user.role === UserRole.USER) {
-    redirect(`/projects/${slug}`);
-  }
 
   let data = null;
 

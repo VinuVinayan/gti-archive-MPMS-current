@@ -245,7 +245,7 @@ function UserProjectGridCard({
             {project.owner ? (
               <div className="mt-1.5 flex min-w-0 items-center gap-2">
                 <OwnerAvatar owner={project.owner} />
-                <span className="truncate text-[12px] font-[550] text-[#303831]">
+                <span className="min-w-0 whitespace-normal break-words text-[12px] font-[550] text-[#303831]">
                   {project.owner.name}
                 </span>
               </div>
@@ -318,7 +318,7 @@ function UserProjectListRow({
           {project.owner ? (
             <div className="mt-1.5 flex min-w-0 items-center gap-2">
               <OwnerAvatar owner={project.owner} />
-              <span className="truncate text-[12px] font-[550] text-[#303831]">
+              <span className="min-w-0 whitespace-normal break-words text-[12px] font-[550] text-[#303831]">
                 {project.owner.name}
               </span>
             </div>

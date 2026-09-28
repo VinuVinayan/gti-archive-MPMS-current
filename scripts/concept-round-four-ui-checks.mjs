@@ -116,8 +116,8 @@ const stageFourCompletionSource = concepts.slice(
 assert(
   concepts.includes("completeStageFourConcepts") &&
     concepts.includes("canCompleteProjectConceptStage(user, managerContext)") &&
-    concepts.includes("Only a project owner, co-owner, or administrator can complete Stage 4.") &&
-    concepts.includes("At least one concept must have a Final Approved File before Stage 4 can be completed.") &&
+    concepts.includes("Only the project owner or an administrator can complete Stage 4.") &&
+    concepts.includes("Every Stage 4 task must have a Final Approved File or be marked as complete before Stage 4 can be completed.") &&
     concepts.includes("projectStageFileHandoff.upsert") &&
     concepts.includes("projectFileChecklist.upsert") &&
     concepts.includes("TransactionIsolationLevel.Serializable") &&
@@ -127,7 +127,7 @@ assert(
     concepts.includes("id: stageFiveWorkflow.id") &&
     concepts.includes("status: ProjectWorkflowStageStatus.LOCKED") &&
     !stageFourCompletionSource.includes("PRODUCTION_AND_HANDOVER"),
-  "Owner/co-owner/administrator Stage 4 completion must atomically hand off final files, unlock Stage 5, and leave Stage 6 untouched.",
+  "Owner/administrator Stage 4 completion must atomically hand off final files, unlock Stage 5, and leave Stage 6 untouched.",
 );
 
 assert(
@@ -135,11 +135,11 @@ assert(
     workspace.includes('"Skip Stage 4"') &&
     workspace.includes('"Skip Stage 4?"') &&
     workspace.includes("A final file will need to be uploaded directly in Stage 5.") &&
-    concepts.includes("const skipped = project.conceptFolders.length === 0") &&
+    concepts.includes("const skipped = stageFourConcepts.length === 0") &&
     concepts.includes("Stage 4 can be skipped only while it is available and Stage 5 is still locked.") &&
     concepts.includes("action: ActivityLogAction.STAGE_SKIPPED") &&
     concepts.includes("skipped: true") &&
-    concepts.includes("handoffs: []"),
+    concepts.includes("for (const concept of approvedStageThreeConcepts)"),
   "An empty available Stage 4 must expose a confirmed, audited skip that unlocks Stage 5 without fake source data.",
 );
 
@@ -151,21 +151,21 @@ for (const label of [
   "Stage 4 Completed",
   "Final Approved File",
   "will continue to Stage 5",
-  "Every Stage 4 concept must receive Final Approval",
+  "Every Stage 4 task must have a Final Approved File or be marked as complete",
 ]) {
   assert(workspace.includes(label), `Missing Round 4 Stage 4 UI label: ${label}`);
 }
 assert(
   workspace.includes("completeStageFourConceptsAction") &&
-    workspace.includes("allConceptsApproved") &&
-    workspace.includes("isEmptyStageFour || allConceptsApproved") &&
+    workspace.includes("allConceptsComplete") &&
+    workspace.includes("isEmptyStageFour || allConceptsComplete") &&
     workspace.includes("canCompleteStage && !managementLocked && stageCompletionReady") &&
     workspace.includes("confirmDisabled={!stageCompletionReady}") &&
     concepts.includes("conceptsWithoutFinalFile.length > 0") &&
-    concepts.includes("Every Stage 4 concept must receive Final Approval") &&
+    concepts.includes("Every Stage 4 task must have a Final Approved File or be marked as complete") &&
     !workspace.includes("Final files for Stage 5") &&
     !workspace.includes("Send to Stage 5"),
-  "Stage 4 completion must require every created concept to be finally approved while allowing only an empty stage to skip.",
+  "Stage 4 completion must require every task to be approved or marked as complete while allowing an empty stage to skip.",
 );
 assert(
   workspace.includes("stageNumber === 4 && folder.approvedAttachment") &&
@@ -264,7 +264,7 @@ assert(
   history.includes(
     "Concept taskers cannot use the legacy approve/complete action. Request changes remains available.",
   ) &&
-    !concepts.includes("completeProject") &&
+    !/\bcompleteProject(?:Stage|Archive)?\s*\(/.test(concepts) &&
     !concepts.includes("ProjectCompletionWorkflow"),
   "Round 4 must not revive legacy tasker approval or trigger project completion/archive logic.",
 );

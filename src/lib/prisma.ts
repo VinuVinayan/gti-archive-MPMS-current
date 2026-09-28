@@ -2,12 +2,16 @@ import { Prisma, PrismaClient } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
+  prismaSchemaSignature?: string;
   prismaReconnectPromise?: Promise<void>;
   prismaPerformanceMetrics?: {
     queryCount: number;
     databaseDurationMs: number;
   };
 };
+
+// Hot reload can retain an instance created before fields or enums were added.
+const prismaSchemaSignature = JSON.stringify(Prisma.dmmf.datamodel);
 
 const prismaPerformanceProfilingEnabled =
   process.env.NODE_ENV !== "production" &&
@@ -55,6 +59,7 @@ function isPrismaClientCompatible(client: PrismaClient) {
   )._previewFeatures;
 
   return (
+    globalForPrisma.prismaSchemaSignature === prismaSchemaSignature &&
     previewFeatures?.includes("relationJoins") === true &&
     Prisma.dmmf.datamodel.models.every((model) => {
       const delegateName = getDelegateName(model.name) as keyof PrismaClient;
@@ -72,6 +77,7 @@ function getPrismaClient() {
 
   const nextClient = createPrismaClient();
   globalForPrisma.prisma = nextClient;
+  globalForPrisma.prismaSchemaSignature = prismaSchemaSignature;
   return nextClient;
 }
 

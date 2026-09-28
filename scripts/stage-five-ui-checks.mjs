@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
+const fileThumbnail = await readFile("src/components/projects/file-thumbnail.tsx", "utf8");
+
 const [workspace, fieldDefinitions, filePicker, requestWorkspace, requestPage, requestActions, summaryAlias, summary, page, workflowAccess, overview, schema, chatWorkspace, service, actions, uploadClient, requestUploadRoute, requestCompleteRoute, requestSourcePreviewRoute, requestSourceDownloadRoute, stageFourWorkspace, conceptActions, emailTemplate, migration, integrityMigration, responseMigration, attachmentScopeMigration, auth, signInPage, signInActions, confirmationDialog] =
   await Promise.all([
     readFile("src/components/projects/stage-five-workspace.tsx", "utf8"),
@@ -172,10 +174,10 @@ assert(
   "Compulsory Text and Marketing Copy must use repeatable Add controls.",
 );
 assert(
-  workspace.includes("activeFile.sourceAttachment.mimeType.startsWith") &&
-    workspace.includes("object-contain") &&
+  workspace.includes("mimeType={activeFile.sourceAttachment.mimeType}") &&
+    fileThumbnail.includes("object-contain") &&
     workspace.includes("truncate") &&
-    workspace.includes("Preview of"),
+    workspace.includes("<FileThumbnail") && workspace.includes("previewPath={`/api/project-assets/${activeFile.sourceAttachment.id}/preview`}"),
   "The selected Stage 5 final file must show a compact image preview beside a truncated name.",
 );
 assert(
@@ -186,12 +188,12 @@ assert(
   "Image/file-bearing checklist controls must support multiple files across manager and request flows.",
 );
 assert(
-  workspace.includes("<Select") &&
-    workspace.includes("<SelectTrigger") &&
-    workspace.includes("<SelectContent") &&
-    workspace.includes("<SelectItem") &&
-    workspace.includes("onValueChange={updateSelectedFile}"),
-  "Stage 5 file switching must use the themed GTI Select control.",
+  workspace.includes("<FileChecklistSwitcher") &&
+    workspace.includes('aria-label="Final file checklists"') &&
+    workspace.includes("aria-pressed={selected}") &&
+    workspace.includes("onSelect={updateSelectedFile}") &&
+    !workspace.includes("onValueChange={updateSelectedFile}"),
+  "Stage 5 file switching must expose selectable file tiles like Stage 6.",
 );
 const readOnlyView = workspace.slice(
   workspace.indexOf("function StageFiveReadOnlyView"),

@@ -47,7 +47,7 @@ import {
 import { PROJECTS_CACHE_TAG } from "@/lib/projects";
 import {
   assertProjectResearchFileAccess,
-  assertResearchFolderWriteAccess,
+  assertResearchFolderUploadAccess,
 } from "@/lib/project-research-access";
 import { assertProjectPrivateAttachmentAccess } from "@/lib/project-private-folders";
 import {
@@ -3082,6 +3082,12 @@ export async function createStageRevision(
           throw new Error("Concept revision files changed before submission. Please retry.");
         }
 
+        // A file submission replaces any earlier request to complete without a file.
+        await tx.projectConceptFolder.updateMany({
+          where: { projectId: input.projectId, taskerStageId: stage.id, completionRequestedAt: { not: null } },
+          data: { completionRequestedAt: null, completionRequestNote: null },
+        });
+
         await tx.projectActivityLog.create({
           data: {
             projectId: input.projectId,
@@ -5878,7 +5884,7 @@ export async function requestAttachmentUpload(
     }
 
     try {
-      await assertResearchFolderWriteAccess(user, {
+      await assertResearchFolderUploadAccess(user, {
         projectId: input.projectId,
         folderId: input.researchFolderId,
       });
@@ -6394,6 +6400,12 @@ export async function completeAttachmentUpload(
           : "view",
     });
 
+    if (concept && attachment.stage?.status === StageStatus.COMPLETED &&
+      attachment.status !== AttachmentStatus.READY &&
+      (attachment.assetType === AttachmentAssetType.REVISION_ORIGINAL || attachment.assetType === AttachmentAssetType.STAGE_SUBMISSION)) {
+      throw new Error("This task is already completed.");
+    }
+
     if (
       concept &&
       isConceptBriefAttachment &&
@@ -6436,7 +6448,7 @@ export async function completeAttachmentUpload(
     if (attachment.uploadedById !== user.id) {
       throw new Error("Only the uploader can complete this research file upload.");
     }
-    await assertResearchFolderWriteAccess(user, {
+    await assertResearchFolderUploadAccess(user, {
       projectId: attachment.projectId,
       folderId: options.researchFolderId,
     });

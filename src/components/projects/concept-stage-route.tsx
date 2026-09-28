@@ -139,7 +139,7 @@ async function ConceptStageDataContent({
   const folderVersion = folders.folders
     .map(
       (folder) =>
-        `${folder.id}:${folder.assignedExecutorId ?? "unassigned"}:${folder.latestRevisionStatus ?? "none"}:${folder.approvedAttachment?.id ?? "none"}`,
+        `${folder.id}:${folder.assignedExecutorId ?? "unassigned"}:${folder.latestRevisionStatus ?? "none"}:${folder.approvedAttachment?.id ?? "none"}:${folder.completedWithoutFileAt?.toISOString() ?? "none"}:${folder.canCompleteWithoutFile}:${folder.completionRequest?.requestedAt ?? "none"}:${folder.canRequestCompletion}`,
     )
     .join("|");
 
@@ -154,6 +154,7 @@ async function ConceptStageDataContent({
       initialFolders={folders.folders}
       canManageConcepts={folders.canManage}
       canCompleteStage={folders.canCompleteStage}
+      skipRevocation={folders.skipRevocation}
       stageWorkflowStatus={folders.workflowStatus}
       completionConcepts={folders.completionConcepts}
       executors={folders.executors}

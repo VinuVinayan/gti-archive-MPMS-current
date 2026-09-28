@@ -52,6 +52,11 @@ const optionalContact = validateProjectContactInput({
 });
 assert.deepEqual(optionalContact.fieldErrors, {});
 assert.deepEqual(optionalContact.data, {
+  kind: "CONTACT",
+  entityType: "PERSON",
+  companyEmail: "",
+  companyPhone: "",
+  companyWebsite: "",
   name: "John Doe",
   company: "ABC",
   position: "",
@@ -81,4 +86,79 @@ assert.equal(
   "Enter a valid international phone number including country code.",
 );
 
+const client = {
+  kind: "CLIENT" as const,
+  company: " Example Company ",
+  name: " Jane   Doe ",
+  email: " Jane@Example.COM ",
+  phone: "+971 50 123 4567",
+  position: " Account Manager ",
+};
+const requiredClient = validateProjectContactInput(client);
+assert.deepEqual(requiredClient.fieldErrors, {});
+assert.equal(requiredClient.data.company, "Example Company");
+assert.equal(requiredClient.data.name, "Jane Doe");
+assert.equal(requiredClient.data.companyEmail, "");
+assert.equal(requiredClient.data.companyPhone, "");
+assert.equal(requiredClient.data.companyWebsite, "");
+for (const field of ["company"] as const) {
+  assert.ok(validateProjectContactInput({ ...client, [field]: " " }).fieldErrors[field], `${field} is required for a client`);
+}
+const completeClient = validateProjectContactInput({
+  ...client,
+  companyEmail: " INFO@Example.COM ",
+  companyPhone: "+1 (202) 555-0123",
+  companyWebsite: "example.com/contact",
+});
+assert.deepEqual(completeClient.fieldErrors, {});
+assert.equal(completeClient.data.companyEmail, "info@example.com");
+assert.equal(completeClient.data.companyPhone, "+12025550123");
+assert.equal(completeClient.data.companyWebsite, "https://example.com/contact");
+assert.equal(completeClient.data.email, "jane@example.com");
+assert.equal(completeClient.data.phone, "+971501234567");
+assert.ok(validateProjectContactInput({ ...client, companyEmail: "invalid@" }).fieldErrors.companyEmail);
+assert.ok(validateProjectContactInput({ ...client, companyPhone: "0501234567" }).fieldErrors.companyPhone);
+for (const companyWebsite of ["javascript:alert(1)", "ftp://example.com", "not a website", "https://", "https://user:password@example.com"]) {
+  assert.ok(validateProjectContactInput({ ...client, companyWebsite }).fieldErrors.companyWebsite, `Reject invalid website: ${companyWebsite}`);
+}
+for (const kind of ["CLIENT", "CONTACT"] as const) {
+  const company = validateProjectContactInput({ ...client, kind, entityType: "COMPANY" });
+  assert.deepEqual(company.fieldErrors, {});
+  assert.equal(company.data.entityType, "COMPANY");
+  const requiredCompanyFields = kind === "CLIENT" ? ["company"] as const : ["company", "name", "email", "phone", "position"] as const;
+  for (const field of requiredCompanyFields) {
+    assert.ok(validateProjectContactInput({ ...client, kind, entityType: "COMPANY", [field]: "" }).fieldErrors[field]);
+  }
+  const person = validateProjectContactInput({
+    ...client, kind, entityType: "PERSON", company: kind === "CLIENT" ? "Client Company" : "",
+    companyEmail: "invalid@", companyPhone: "bad phone", companyWebsite: "javascript:alert(1)",
+  });
+  assert.deepEqual(person.fieldErrors, {}, "Hidden company fields must not prevent saving a person.");
+  assert.equal(person.data.entityType, "PERSON");
+  assert.equal(person.data.company, kind === "CLIENT" ? "Client Company" : "");
+  assert.equal(person.data.companyEmail, "");
+  assert.equal(person.data.companyPhone, "");
+  assert.equal(person.data.companyWebsite, "");
+  assert.equal(person.data.email, "jane@example.com");
+  const requiredPersonFields = kind === "CLIENT" ? ["name", "company"] as const : ["name", "email", "phone", "position"] as const;
+  for (const field of requiredPersonFields) {
+    assert.ok(validateProjectContactInput({ ...client, kind, entityType: "PERSON", [field]: "" }).fieldErrors[field]);
+  }
+  const employedPerson = validateProjectContactInput({ ...client, kind, entityType: "PERSON" });
+  assert.equal(employedPerson.data.company, "Example Company");
+  assert.equal(employedPerson.data.entityType, "PERSON", "A company name must not change a person's type.");
+}
+// Client creation accepts only the fields required for the selected client type.
+assert.deepEqual(validateProjectContactInput({ kind: "CLIENT", entityType: "PERSON", name: "Jane Doe", company: "Example Ltd" }).fieldErrors, {});
+assert.deepEqual(validateProjectContactInput({ kind: "CLIENT", entityType: "COMPANY", company: "Example Ltd" }).fieldErrors, {});
+assert.deepEqual(validateProjectContactInput({ kind: "CLIENT", company: "Example Ltd", name: " ", email: " ", phone: " ", position: " " }).fieldErrors, {});
+assert.deepEqual(Object.keys(validateProjectContactInput({ kind: "CLIENT", entityType: "PERSON" }).fieldErrors).sort(), ["company", "name"]);
+assert.deepEqual(Object.keys(validateProjectContactInput({ kind: "CLIENT", entityType: "COMPANY" }).fieldErrors), ["company"]);
+for (const entityType of ["PERSON", "COMPANY"] as const) {
+  assert.ok(validateProjectContactInput({ ...client, entityType, email: "invalid@" }).fieldErrors.email);
+  assert.ok(validateProjectContactInput({ ...client, entityType, phone: "not a phone" }).fieldErrors.phone);
+}
+const companyOnly = validateProjectContactInput({ kind: "CLIENT", entityType: "COMPANY", company: "Example Ltd" });
+assert.equal(companyOnly.data.name, "", "Do not invent a representative when none was provided.");
+assert.ok(validateProjectContactInput({ ...client, entityType: "INVALID" as "PERSON" }).fieldErrors.entityType);
 console.log("Project contact validation checks passed.");

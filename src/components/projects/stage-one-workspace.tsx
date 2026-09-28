@@ -1,5 +1,7 @@
 "use client";
 
+import { FileThumbnail } from "@/components/projects/file-thumbnail";
+
 import Link from "next/link";
 import {
   useCallback,
@@ -93,8 +95,8 @@ function getTodayDateValue() {
   return `${year}-${month}-${day}`;
 }
 
-function getDefaultContactForm(): ProjectContactForm {
-  return { name: "", company: "", position: "", email: "", phone: "" };
+function getDefaultContactForm(entityType: ProjectContactForm["entityType"] = "PERSON"): ProjectContactForm {
+  return { entityType, name: "", company: "", companyEmail: "", companyPhone: "", companyWebsite: "", position: "", email: "", phone: "" };
 }
 
 function formatBytes(bytes: number) {
@@ -134,6 +136,8 @@ function PartySelector({
   options,
   values,
   multiple = false,
+  companyFirst = false,
+  showPersonName = false,
   disabled,
   error,
   onChange,
@@ -144,6 +148,8 @@ function PartySelector({
   options: ProjectInquiryPartyOption[];
   values: ProjectInquiryPartySelection[];
   multiple?: boolean;
+  companyFirst?: boolean;
+  showPersonName?: boolean;
   disabled: boolean;
   error?: string;
   onChange: (values: ProjectInquiryPartySelection[]) => void;
@@ -159,19 +165,34 @@ function PartySelector({
     [values],
   );
   const singleValue = multiple ? null : values[0] ?? null;
+  function partyLabel(party: ProjectInquiryPartySelection) {
+    return party.entityType === "COMPANY" ? party.company || party.name : party.name;
+  }
+  function partyDescription(party: ProjectInquiryPartySelection) {
+    return party.entityType === "COMPANY"
+      ? [party.name, party.position, party.companyEmail || party.email].filter(Boolean).join(" · ")
+      : [party.company, party.position, party.email].filter(Boolean).join(" · ");
+  }
   const showSearchInput = multiple || !singleValue || open;
   const filteredOptions = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("en");
-    return options.filter((option) => {
+    const matches = options.filter((option) => {
       if (multiple && selectedKeys.has(`${option.source}:${option.id}`)) {
         return false;
       }
       if (!normalizedQuery) return true;
-      return [option.name, option.company, option.position, option.email]
+      return [option.name, option.company, option.position, option.email, option.companyEmail, option.companyPhone, option.companyWebsite]
         .filter(Boolean)
         .some((part) => part!.toLocaleLowerCase("en").includes(normalizedQuery));
     });
-  }, [multiple, options, query, selectedKeys]);
+    if (companyFirst) {
+      matches.sort((left, right) =>
+        Number(right.entityType === "COMPANY") -
+        Number(left.entityType === "COMPANY"),
+      );
+    }
+    return matches;
+  }, [companyFirst, multiple, options, query, selectedKeys]);
 
   function selectOption(option: ProjectInquiryPartyOption) {
     onChange(multiple ? [...values, option] : [option]);
@@ -229,11 +250,11 @@ function PartySelector({
                 key={`${value.source}:${value.id}`}
                 className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-[#edf4ee] py-1 pl-2.5 pr-1 text-[12px] font-[650] text-[#285f43]"
               >
-                <span className="max-w-[180px] truncate">{value.name}</span>
+                <span className="max-w-[180px] min-w-0 whitespace-normal break-words">{partyLabel(value)}</span>
                 {!disabled ? (
                   <button
                     type="button"
-                    aria-label={`Remove ${value.name}`}
+                    aria-label={`Remove ${partyLabel(value)}`}
                     onClick={() => removeOption(value)}
                     className="grid size-5 place-items-center rounded-full hover:bg-[#dce9df]"
                   >
@@ -253,12 +274,12 @@ function PartySelector({
             onClick={() => setOpen(true)}
             className="min-w-0 flex-1 text-left"
           >
-            <span className="block truncate text-[13px] font-[650] text-[#263029]">
-              {singleValue.name}
+            <span className="block min-w-0 whitespace-normal break-words text-[13px] font-[650] text-[#263029]">
+              {partyLabel(singleValue)}
             </span>
-            {singleValue.company || singleValue.email ? (
-              <span className="block truncate text-[11px] text-[#7d8780]">
-                {singleValue.company || singleValue.email}
+            {partyDescription(singleValue) ? (
+              <span className="block whitespace-normal break-words text-[11px] text-[#7d8780]">
+                {partyDescription(singleValue)}
               </span>
             ) : null}
           </button>
@@ -325,6 +346,11 @@ function PartySelector({
           ) : filteredOptions.length ? (
             filteredOptions.map((option) => {
               const selected = selectedKeys.has(`${option.source}:${option.id}`);
+              const optionName = showPersonName ? option.name.trim() || partyLabel(option) : partyLabel(option);
+              const companyName = option.source === "MANUAL_CONTACT" ? option.company?.trim() : null;
+              const optionDetails = showPersonName
+                ? companyName || "Company name not available."
+                : [option.entityType === "COMPANY" ? "Company" : "Person", partyDescription(option)].filter(Boolean).join(" · ");
               return (
                 <button
                   key={`${option.source}:${option.id}`}
@@ -337,7 +363,7 @@ function PartySelector({
                   className="flex w-full items-center gap-3 rounded-[13px] px-3 py-2.5 text-left hover:bg-[#f3f7f3]"
                 >
                   <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[#edf4ee] text-[11px] font-[750] text-[#2d704b]">
-                    {option.name
+                    {optionName
                       .split(/\s+/)
                       .map((part) => part[0])
                       .join("")
@@ -345,14 +371,11 @@ function PartySelector({
                       .toUpperCase()}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-[650] text-[#202923]">
-                      {option.name}
+                    <span className={cn("block min-w-0 whitespace-normal break-words font-[650] text-[#202923]", showPersonName ? "text-[15px]" : "text-[13px]")}>
+                      {optionName}
                     </span>
-                    <span className="block truncate text-[11px] text-[#7d8780]">
-                      {[option.company, option.position, option.email]
-                        .filter(Boolean)
-                        .join(" · ") ||
-                        (option.source === "USER" ? "FluxSys user" : "Directory contact")}
+                    <span className="block whitespace-normal break-words text-[11px] text-[#7d8780]">
+                      {optionDetails}
                     </span>
                   </span>
                   {selected ? <Check className="h-4 w-4 text-brand" /> : null}
@@ -361,7 +384,7 @@ function PartySelector({
             })
           ) : (
             <p className="px-4 py-8 text-center text-[13px] text-[#7b847d]">
-              No matching people or contacts.
+              {companyFirst ? "No matching companies or contacts." : "No matching people or contacts."}
             </p>
           )}
         </div>
@@ -717,7 +740,12 @@ function AttachmentTextarea({
               key={attachment.id}
               className="inline-flex max-w-full items-center gap-2 rounded-[10px] border border-[#dfe6df] bg-[#f7f9f7] px-2.5 py-1.5 text-[11px] text-[#465149]"
             >
-              <FileText className="h-3.5 w-3.5 shrink-0 text-[#377253]" />
+              <FileThumbnail
+                fileName={attachment.originalFileName}
+                mimeType={attachment.mimeType}
+                previewPath={`/api/project-assets/${attachment.id}/preview`}
+                className="h-8 w-10"
+              />
               <span className="max-w-[220px] truncate">{attachment.originalFileName}</span>
               <span className="text-[#8b948d]">{formatBytes(attachment.fileSize)}</span>
               {!disabled ? (
@@ -949,14 +977,14 @@ export function StageOneWorkspace({
   function openContactDialog(target: PartyField) {
     if (!pageData.canEdit) return;
     setContactTarget(target);
-    setContactForm(getDefaultContactForm());
+    setContactForm(getDefaultContactForm(target === "client" ? "COMPANY" : "PERSON"));
     setContactErrors({});
     setContactError(undefined);
   }
 
   async function handleCreateContact() {
     if (!contactTarget) return;
-    const validation = validateProjectContactInput(contactForm);
+    const validation = validateProjectContactInput({ ...contactForm, kind: contactTarget === "client" ? "CLIENT" : "CONTACT" });
 
     if (Object.keys(validation.fieldErrors).length > 0) {
       setContactErrors(validation.fieldErrors);
@@ -1152,10 +1180,12 @@ export function StageOneWorkspace({
 
           <form onSubmit={handleSubmit}>
             <div className="grid gap-x-10 gap-y-6 lg:grid-cols-2">
-              <StageOneFormField label="Client Name" required error={fieldErrors.client}>
+              <StageOneFormField label="Client" required error={fieldErrors.client}>
                 <PartySelector
-                  ariaLabel="Client name"
-                  placeholder="Search or select client"
+                  ariaLabel="Client"
+                  companyFirst
+                  showPersonName
+                  placeholder="Search or select a person or company"
                   options={partyOptions}
                   values={client ? [client] : []}
                   disabled={readOnly || submitting}
@@ -1388,12 +1418,13 @@ export function StageOneWorkspace({
       )}
 
       <ProjectContactDialog
+        kind={contactTarget === "client" ? "CLIENT" : "CONTACT"}
         isOpen={contactTarget !== null}
         title={contactTarget === "client" ? "Add Client" : "Add Beneficiary"}
         description={
           contactTarget === "client"
-            ? "Enter the client details. The client will also be available in the contact directory."
-            : "Enter the beneficiary details. The beneficiary will also be available in the contact directory."
+            ? "Choose a person or company and enter the client details. This client will be available for future projects."
+            : "Choose a person or company and enter the beneficiary details. This beneficiary will be available for future projects."
         }
         submitLabel={contactTarget === "client" ? "Add Client" : "Add Beneficiary"}
         form={contactForm}
@@ -1404,7 +1435,7 @@ export function StageOneWorkspace({
         onSubmit={() => void handleCreateContact()}
         onChange={(field, value) => {
           setContactForm((current) => ({ ...current, [field]: value }));
-          setContactErrors((current) => ({ ...current, [field]: undefined }));
+          setContactErrors((current) => field === "entityType" ? {} : { ...current, [field]: undefined });
           setContactError(undefined);
         }}
       />

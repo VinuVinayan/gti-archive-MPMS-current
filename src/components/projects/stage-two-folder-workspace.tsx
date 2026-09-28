@@ -1,6 +1,7 @@
 "use client";
 
-import Image from "next/image";
+import { FileThumbnail } from "@/components/projects/file-thumbnail";
+import Link from "next/link";
 import {
   type DragEvent,
   useEffect,
@@ -16,6 +17,7 @@ import {
   Download,
   Eye,
   File,
+  FileDown,
   FileArchive,
   FileCode2,
   FileImage,
@@ -23,12 +25,15 @@ import {
   FileText,
   FileVideo,
   FolderOpen,
+  FolderPlus,
   Grid2X2,
   List,
   Loader2,
   LockKeyhole,
   MoreVertical,
   Plus,
+  Pin,
+  PinOff,
   Presentation,
   Search,
   SlidersHorizontal,
@@ -37,6 +42,13 @@ import {
   UploadCloud,
 } from "lucide-react";
 
+import { StageTwoImportDialog } from "@/components/projects/stage-two-import-dialog";
+import { FolderColorBadge, FolderColorFilterControl, FolderColorMenu } from "@/components/projects/folder-color-label";
+import { compareFolderColors, getFolderColor, matchesFolderColor, type FolderColor, type FolderColorFilter } from "@/lib/project-folder-colors-shared";
+import { NewFolderDialog } from "@/components/projects/new-folder-dialog";
+import { comparePinnedItems } from "@/lib/project-folder-pins-shared";
+import { createProjectResearchFolderAction, deleteProjectResearchFolderAction, setProjectFolderItemPinAction, setProjectFolderItemColorAction } from "@/app/(dashboard)/projects/[slug]/stages/2/actions";
+import { createProjectPrivateSubfolderAction, deleteProjectPrivateSubfolderAction } from "@/app/(dashboard)/projects/[slug]/workspace/private/actions";
 import { AssetPreviewDialog } from "@/components/projects/asset-preview-button";
 import { ProjectBackButton } from "@/components/projects/project-back-button";
 import { ProjectAccessRealtimeGuard } from "@/components/projects/project-access-realtime-guard";
@@ -72,8 +84,9 @@ type FolderData = NonNullable<
   Awaited<ReturnType<typeof import("@/lib/project-research").getProjectResearchFolderPageData>>
 >;
 type FolderFile = FolderData["files"][number];
+type ChildFolder = FolderData["folders"][number];
 type FileView = "grid" | "list";
-type FileSort = "newest" | "oldest" | "name-asc" | "name-desc";
+type FileSort = "newest" | "oldest" | "name-asc" | "name-desc" | "colour";
 
 type PendingUpload = {
   key: string;
@@ -90,6 +103,7 @@ const sortLabels: Record<FileSort, string> = {
   oldest: "Oldest",
   "name-asc": "Name (A–Z)",
   "name-desc": "Name (Z–A)",
+  colour: "Colour label",
 };
 
 function subscribeToFileView(onStoreChange: () => void) {
@@ -238,16 +252,14 @@ function FileVisual({
 
   if (kind === "image") {
     return (
-      <span className="relative block h-full w-full overflow-hidden bg-[#edf2ee]">
-        <Image
-          src={previewHref}
-          alt=""
-          fill
-          unoptimized
-          sizes="(max-width: 640px) 80vw, (max-width: 1200px) 33vw, 240px"
-          className="object-cover transition duration-300 group-hover:scale-[1.02]"
-        />
-      </span>
+      <FileThumbnail
+        fileName={file.name}
+        mimeType={file.mimeType}
+        previewPath={previewHref}
+        className="h-full w-full rounded-none border-0 bg-[#edf2ee]"
+        imageClassName="object-cover transition duration-300 group-hover:scale-[1.02]"
+        fallback={<FileKindIcon file={file} className="h-12 w-12" />}
+      />
     );
   }
 
@@ -283,6 +295,10 @@ function FileActionMenu({
   deleting,
   onPreview,
   onDelete,
+  onPin,
+  pinPending,
+  onColor,
+  colorPending,
 }: {
   file: FolderFile;
   baseApi: string;
@@ -290,6 +306,10 @@ function FileActionMenu({
   deleting: boolean;
   onPreview: () => void;
   onDelete: () => void;
+  onPin: () => void;
+  pinPending: boolean;
+  onColor: (color: FolderColor | null) => void;
+  colorPending: boolean;
 }) {
   return (
     <DropdownMenu>
@@ -315,6 +335,13 @@ function FileActionMenu({
             <Download className="h-4 w-4" /> Download
           </a>
         </DropdownMenuItem>
+        {canWrite ? <FolderColorMenu value={file.colorLabel} pending={colorPending || deleting} onChange={onColor} /> : null}
+        {canWrite ? (
+          <DropdownMenuItem disabled={pinPending || deleting} onSelect={onPin}>
+            {pinPending ? <Loader2 className="size-4 animate-spin" /> : file.pinnedAt ? <PinOff className="size-4" /> : <Pin className="size-4" />}
+            {file.pinnedAt ? "Unpin" : "Pin to top"}
+          </DropdownMenuItem>
+        ) : null}
         {canWrite ? (
           <DropdownMenuItem
             disabled={deleting}
@@ -336,6 +363,10 @@ function FileGalleryCard({
   deleting,
   onPreview,
   onDelete,
+  onPin,
+  pinPending,
+  onColor,
+  colorPending,
 }: {
   file: FolderFile;
   baseApi: string;
@@ -343,6 +374,10 @@ function FileGalleryCard({
   deleting: boolean;
   onPreview: () => void;
   onDelete: () => void;
+  onPin: () => void;
+  pinPending: boolean;
+  onColor: (color: FolderColor | null) => void;
+  colorPending: boolean;
 }) {
   const previewable = isBrowserPreviewable(file);
   const textContentPath = `${baseApi}/files/${file.id}`;
@@ -359,6 +394,7 @@ function FileGalleryCard({
         <p className="min-w-0 flex-1 truncate text-[12px] font-[700] text-[#273129]" title={file.name}>
           {file.name}
         </p>
+        {file.pinnedAt ? <Pin className="size-3.5 shrink-0 text-[#24764e]" aria-label="Pinned" /> : null}
         <FileActionMenu
           file={file}
           baseApi={baseApi}
@@ -366,6 +402,10 @@ function FileGalleryCard({
           deleting={deleting}
           onPreview={onPreview}
           onDelete={onDelete}
+          onPin={onPin}
+          pinPending={pinPending}
+          onColor={onColor}
+          colorPending={colorPending}
         />
       </div>
       {previewable ? (
@@ -387,8 +427,9 @@ function FileGalleryCard({
         </a>
       )}
       <div className="min-w-0 px-3 py-3">
-        <p className="truncate text-[11px] text-[#657169]" title={file.uploadedBy}>
-          {file.uploadedBy}
+        <FolderColorBadge value={file.colorLabel} className="mb-1.5" />
+        <p className="min-w-0 whitespace-normal break-words text-[11px] text-[#657169]" title={file.uploadedBy}>
+          Uploaded by {file.uploadedBy}
         </p>
         <p className="mt-1 text-[10px] text-[#8a948d]">
           Uploaded {formatUploadedDate(file.uploadedAt)} · {formatBytes(file.size)}
@@ -579,14 +620,24 @@ export function StageTwoFolderWorkspace({
     () => "grid",
   );
   const [sort, setSort] = useState<FileSort>("newest");
+  const [colorFilter, setColorFilter] = useState<FolderColorFilter>("ALL");
+  const [currentFolderColor, setCurrentFolderColor] = useState(data.folder.colorLabel);
+  const [colorPendingIds, setColorPendingIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
   const [files, setFiles] = useState<FolderFile[]>(data.files);
+  const [folders, setFolders] = useState(data.folders);
+  const [folderDialogOpen, setFolderDialogOpen] = useState(false);
+  const [folderPending, setFolderPending] = useState(false);
+  const [pinPendingIds, setPinPendingIds] = useState<Set<string>>(new Set());
+  const [folderError, setFolderError] = useState<string>();
+  const [folderToDelete, setFolderToDelete] = useState<FolderData["folders"][number]>();
   const [uploads, setUploads] = useState<PendingUpload[]>([]);
   const [deletingId, setDeletingId] = useState<string>();
   const [previewFile, setPreviewFile] = useState<FolderFile>();
   const [fileToDelete, setFileToDelete] = useState<FolderFile>();
   const [deleteError, setDeleteError] = useState<string>();
   const [textFileDialogOpen, setTextFileDialogOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [textFilePending, setTextFilePending] = useState(false);
   const [textFileProgress, setTextFileProgress] = useState(0);
   const [textFileError, setTextFileError] = useState<string>();
@@ -598,20 +649,100 @@ export function StageTwoFolderWorkspace({
     ? uploadProjectPrivateFile
     : uploadProjectResearchFile;
   const projectWorkspaceHref = `/projects/${data.project.id}`;
+  const folderHref = (id: string) => context === "research"
+    ? `/projects/${data.project.id}/stages/2/folders/${id}`
+    : `/projects/${data.project.id}/workspace/${isPrivateFolder ? "private" : "shared"}/${id}`;
+  const visibleFolders = useMemo(() => folders.filter((folder) => matchesFolderColor(folder.colorLabel, colorFilter) && folder.name.toLocaleLowerCase("en").includes(query.trim().toLocaleLowerCase("en"))).sort((left, right) => {
+    if (sort === "colour") return compareFolderColors(left, right) || left.name.localeCompare(right.name);
+    if (sort === "name-asc") return left.name.localeCompare(right.name);
+    if (sort === "name-desc") return right.name.localeCompare(left.name);
+    const difference = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+    return sort === "oldest" ? difference : -difference;
+  }), [folders, query, sort, colorFilter]);
+
+  async function colorItem(kind: "folder" | "file", item: { id: string }, colorLabel: FolderColor | null) {
+    const key = `${kind}:${item.id}`;
+    if (!data.canWrite || colorPendingIds.has(key)) return;
+    setColorPendingIds((current) => new Set(current).add(key));
+    try {
+      const result = await setProjectFolderItemColorAction({
+        projectId: data.project.id, context: isPrivateFolder ? "private" : "research", kind,
+        folderId: kind === "folder" ? item.id : data.folder.id,
+        fileId: kind === "file" ? item.id : undefined, colorLabel,
+      });
+      if ("error" in result) { showErrorToast(result.error); return; }
+      if (kind === "folder" && item.id === data.folder.id) setCurrentFolderColor(result.colorLabel);
+      else if (kind === "folder") setFolders((current) => current.map((folder) => folder.id === item.id ? { ...folder, colorLabel: result.colorLabel } : folder));
+      else setFiles((current) => current.map((file) => file.id === item.id ? { ...file, colorLabel: result.colorLabel } : file));
+      showSuccessToast(result.colorLabel ? "Colour label updated." : "Colour label removed.");
+    } catch { showErrorToast("Unable to update this colour label. Please try again."); }
+    finally { setColorPendingIds((current) => { const next = new Set(current); next.delete(key); return next; }); }
+  }
+
+  async function pinItem(kind: "folder" | "file", item: ChildFolder | FolderFile) {
+    const key = `${kind}:${item.id}`;
+    if (!data.canWrite || pinPendingIds.has(key)) return;
+    setPinPendingIds((current) => new Set(current).add(key));
+    try {
+      const result = await setProjectFolderItemPinAction({
+        projectId: data.project.id, context: isPrivateFolder ? "private" : "research", kind,
+        folderId: kind === "folder" ? item.id : data.folder.id,
+        fileId: kind === "file" ? item.id : undefined, pinned: !item.pinnedAt,
+      });
+      if ("error" in result) { showErrorToast(result.error); return; }
+      if (kind === "folder") setFolders((current) => current.map((folder) => folder.id === item.id ? { ...folder, pinnedAt: result.pinnedAt } : folder));
+      else setFiles((current) => current.map((file) => file.id === item.id ? { ...file, pinnedAt: result.pinnedAt } : file));
+      showSuccessToast(result.pinnedAt ? "Pinned to top." : "Item unpinned.");
+    } catch { showErrorToast("Unable to update this pin. Please try again."); }
+    finally { setPinPendingIds((current) => { const next = new Set(current); next.delete(key); return next; }); }
+  }
+
+  async function createFolder(name: string) {
+    if (!data.canWrite || folderPending) return;
+    setFolderPending(true);
+    setFolderError(undefined);
+    try {
+      const input = { projectId: data.project.id, parentFolderId: data.folder.id, name };
+      const result = await (isPrivateFolder ? createProjectPrivateSubfolderAction(input) : createProjectResearchFolderAction(input));
+      if ("error" in result) { setFolderError(result.error); return; }
+      setFolders((current) => [...current, { ...result.folder, fileCount: 0, folderCount: 0, pinnedAt: null, colorLabel: null, createdAt: new Date().toISOString() }]);
+      setFolderDialogOpen(false);
+      setColorFilter("ALL");
+      setQuery("");
+      showSuccessToast("Folder created.");
+    } catch { setFolderError("Unable to create folder. Please try again."); }
+    finally { setFolderPending(false); }
+  }
+
+  async function deleteFolder() {
+    if (!folderToDelete || !data.canWrite || folderPending) return;
+    setFolderPending(true);
+    setFolderError(undefined);
+    try {
+      const input = { projectId: data.project.id, folderId: folderToDelete.id };
+      const result = await (isPrivateFolder ? deleteProjectPrivateSubfolderAction(input) : deleteProjectResearchFolderAction(input));
+      if ("error" in result) { setFolderError(result.error); return; }
+      setFolders((current) => current.filter((folder) => folder.id !== input.folderId));
+      setFolderToDelete(undefined);
+      showSuccessToast("Folder deleted.");
+    } catch { setFolderError("Unable to delete folder. Please try again."); }
+    finally { setFolderPending(false); }
+  }
 
   const visibleFiles = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("en");
     const next = files.filter((file) =>
-      normalizedQuery ? file.name.toLocaleLowerCase("en").includes(normalizedQuery) : true,
+      matchesFolderColor(file.colorLabel, colorFilter) && (!normalizedQuery || file.name.toLocaleLowerCase("en").includes(normalizedQuery)),
     );
 
     return next.sort((left, right) => {
+      if (sort === "colour") return compareFolderColors(left, right) || left.name.localeCompare(right.name);
       if (sort === "name-asc") return left.name.localeCompare(right.name);
       if (sort === "name-desc") return right.name.localeCompare(left.name);
       const dateDifference = new Date(left.uploadedAt).getTime() - new Date(right.uploadedAt).getTime();
       return sort === "oldest" ? dateDifference : -dateDifference;
     });
-  }, [files, query, sort]);
+  }, [files, query, sort, colorFilter]);
 
   function updateUpload(key: string, patch: Partial<PendingUpload>) {
     setUploads((current) =>
@@ -620,7 +751,7 @@ export function StageTwoFolderWorkspace({
   }
 
   async function uploadFiles(fileList: FileList | File[]) {
-    if (!data.canWrite) return;
+    if (!data.canUpload) return;
     const selectedFiles = Array.from(fileList);
     if (selectedFiles.length === 0) return;
 
@@ -666,6 +797,8 @@ export function StageTwoFolderWorkspace({
       current.filter((upload) => failedUploadKeys.has(upload.key)),
     );
     if (uploadedCount > 0) {
+      setQuery("");
+      setColorFilter("ALL");
       showSuccessToast(`${uploadedCount} ${uploadedCount === 1 ? "file" : "files"} uploaded.`);
     }
     if (failedCount > 0) {
@@ -734,6 +867,112 @@ export function StageTwoFolderWorkspace({
     window.dispatchEvent(new Event(FILE_VIEW_CHANGE_EVENT));
   }
 
+  const unpinnedFolders = visibleFolders.filter((folder) => !folder.pinnedAt);
+  const unpinnedFiles = visibleFiles.filter((file) => !file.pinnedAt);
+  const pinnedItems = [
+    ...visibleFolders.filter((folder) => folder.pinnedAt).map((item) => ({ kind: "folder" as const, item })),
+    ...visibleFiles.filter((file) => file.pinnedAt).map((item) => ({ kind: "file" as const, item })),
+  ].sort((left, right) => (sort === "colour" ? compareFolderColors(left.item, right.item) : 0) || comparePinnedItems(left.item, right.item) || left.item.id.localeCompare(right.item.id));
+
+  function renderFolder(folder: ChildFolder) {
+    return (
+      <div key={folder.id} className="relative flex self-start items-center rounded-[16px] border border-[#dfe6df] bg-white shadow-sm">
+        <Link href={folderHref(folder.id)} className="flex min-w-0 flex-1 items-center gap-3 rounded-[16px] p-4 hover:bg-[#f1f7f2]">
+          <span className="relative shrink-0"><FolderOpen className="size-9 text-[#397655]" style={{ color: getFolderColor(folder.colorLabel)?.hex }} />{folder.pinnedAt ? <Pin className="absolute -bottom-1 -right-1 size-3.5 rounded bg-white text-[#24764e]" aria-label="Pinned" /> : null}</span>
+          <span className="min-w-0 flex-1"><span className="block truncate text-[14px] font-[700] text-[#263129]" title={folder.name}>{folder.name}</span>
+            <FolderColorBadge value={folder.colorLabel} className="mt-1" />
+            <span className="mt-1 block text-[11px] text-[#758078]">{folder.folderCount} {folder.folderCount === 1 ? "folder" : "folders"} · {folder.fileCount} {folder.fileCount === 1 ? "file" : "files"}</span>
+          </span>
+        </Link>
+        {data.canWrite ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="ghost" size="icon" className="mr-2 shrink-0" aria-label={`Actions for folder ${folder.name}`}><MoreVertical className="size-4" /></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <FolderColorMenu value={folder.colorLabel} pending={colorPendingIds.has(`folder:${folder.id}`)} onChange={(color) => void colorItem("folder", folder, color)} />
+              <DropdownMenuItem disabled={pinPendingIds.has(`folder:${folder.id}`)} onSelect={() => void pinItem("folder", folder)}>
+                {folder.pinnedAt ? <PinOff className="size-4" /> : <Pin className="size-4" />}{folder.pinnedAt ? "Unpin" : "Pin to top"}
+              </DropdownMenuItem>
+              <DropdownMenuItem className="text-[#ad514b] focus:text-[#ad514b]" onSelect={() => { setFolderError(undefined); setFolderToDelete(folder); }}>
+                <Trash2 className="size-4" />Delete folder
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
+      </div>
+    );
+  }
+
+  function renderFile(file: FolderFile) {
+    return view === "grid" ? (
+      <FileGalleryCard
+        key={file.id}
+        file={file}
+        onPin={() => void pinItem("file", file)}
+        pinPending={pinPendingIds.has(`file:${file.id}`)}
+        onColor={(color) => void colorItem("file", file, color)}
+        colorPending={colorPendingIds.has(`file:${file.id}`)}
+        baseApi={baseApi}
+        canWrite={data.canWrite}
+        deleting={deletingId === file.id}
+        onPreview={() => setPreviewFile(file)}
+        onDelete={() => {
+          setDeleteError(undefined);
+          setFileToDelete(file);
+        }}
+      />
+    ) : (
+      <div key={file.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_44px] items-center gap-3 border-b border-[#edf1ee] px-4 py-3.5 last:border-0 md:grid-cols-[minmax(0,1fr)_120px_160px_110px_52px] md:gap-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <FileThumbnail fileName={file.name} mimeType={file.mimeType} previewPath={`/api/project-assets/${file.attachmentId}/preview`} className="size-9 rounded-[10px]" fallback={<FileKindIcon file={file} />} />
+          {file.pinnedAt ? <Pin className="size-3.5 shrink-0 text-[#24764e]" aria-label="Pinned" /> : null}
+          <div className="min-w-0">
+            {isBrowserPreviewable(file) ? (
+              <button
+                type="button"
+                onClick={() => setPreviewFile(file)}
+                className="block max-w-full truncate text-left text-[13px] font-[680] text-[#253028] hover:text-brand hover:underline"
+                title={file.name}
+              >
+                {file.name}
+              </button>
+            ) : (
+              <a
+                href={`${baseApi}/files/${file.id}/download`}
+                className="block truncate text-[13px] font-[680] text-[#253028] hover:text-brand hover:underline"
+                title={file.name}
+              >
+                {file.name}
+              </a>
+            )}
+            <FolderColorBadge value={file.colorLabel} className="mt-1" />
+            <p className="min-w-0 whitespace-normal break-words text-[10px] text-[#879188] md:hidden">Uploaded by {file.uploadedBy} · {formatBytes(file.size)}</p>
+          </div>
+        </div>
+        <span className="hidden text-[11px] text-[#6f7b72] md:block">{getExtension(file.name)}</span>
+        <span className="hidden text-[11px] leading-4 text-[#6f7b72] md:block">{formatUploadedDate(file.uploadedAt, true)}<span className="block min-w-0 whitespace-normal break-words text-[10px] text-[#8b958e]" title={file.uploadedBy}>Uploaded by {file.uploadedBy}</span></span>
+        <span className="hidden text-[11px] text-[#6f7b72] md:block">{formatBytes(file.size)}</span>
+        <FileActionMenu
+          onPin={() => void pinItem("file", file)}
+          pinPending={pinPendingIds.has(`file:${file.id}`)}
+          onColor={(color) => void colorItem("file", file, color)}
+          colorPending={colorPendingIds.has(`file:${file.id}`)}
+          file={file}
+          baseApi={baseApi}
+          canWrite={data.canWrite}
+          deleting={deletingId === file.id}
+          onPreview={() => setPreviewFile(file)}
+          onDelete={() => {
+            setDeleteError(undefined);
+            setFileToDelete(file);
+          }}
+        />
+      </div>
+    );
+  }
+
+
   return (
     <section className="mx-auto flex h-full min-h-0 min-w-0 w-full max-w-[1420px] overflow-hidden">
       <ProjectAccessRealtimeGuard projectId={data.project.id} currentUserId={currentUserId} />
@@ -745,7 +984,7 @@ export function StageTwoFolderWorkspace({
           >
             <nav
               aria-label="Folder navigation"
-              className="flex min-w-0 items-center gap-2 border-b border-[#e6ece7] bg-white px-5 py-3 sm:px-8"
+              className="flex min-w-0 flex-wrap items-center gap-2 border-b border-[#e6ece7] bg-white px-5 py-3 sm:px-8"
             >
               {context === "research" ? (
                 <ProjectBackButton
@@ -760,8 +999,12 @@ export function StageTwoFolderWorkspace({
                   ariaLabel="Back to project workspace"
                 />
               )}
+              {data.ancestors.map((ancestor) => <span key={ancestor.id} className="contents">
+                <span className="text-[#a0aaa2]">/</span>
+                <Link href={folderHref(ancestor.id)} title={ancestor.name} className="max-w-[180px] truncate text-[12px] font-[650] text-[#2d7952] hover:underline">{ancestor.name}</Link>
+              </span>)}
               <span className="text-[#a0aaa2]">/</span>
-              <span className="max-w-[220px] truncate text-[12px] font-[700] text-[#536158]">
+              <span aria-current="page" className="max-w-[220px] truncate text-[12px] font-[700] text-[#536158]">
                 {data.folder.name}
               </span>
             </nav>
@@ -769,12 +1012,13 @@ export function StageTwoFolderWorkspace({
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex min-w-0 items-center gap-3">
                   <span className="grid size-11 shrink-0 place-items-center rounded-[13px] bg-[#e7f3ea] text-[#2d7952]">
-                    <FolderOpen className="h-5 w-5" />
+                    <FolderOpen className="h-5 w-5" style={{ color: getFolderColor(currentFolderColor)?.hex }} />
                   </span>
                   <div className="min-w-0">
                     <h1 className="truncate text-[26px] font-[780] tracking-[-0.04em] text-[#151c17] sm:text-[30px]">
                       {data.folder.name}
                     </h1>
+                    <FolderColorBadge value={currentFolderColor} className="mt-1" />
                     <p className="mt-0.5 text-[11px] text-[#77827a]">
                       {context === "private"
                         ? `Only you can access this folder · ${files.length} ${files.length === 1 ? "file" : "files"}`
@@ -785,13 +1029,28 @@ export function StageTwoFolderWorkspace({
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {!data.canWrite ? (
+                  {data.canWrite ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild><Button type="button" variant="secondary" size="icon" aria-label={`Actions for folder ${data.folder.name}`}><MoreVertical className="size-4" /></Button></DropdownMenuTrigger>
+                      <DropdownMenuContent align="end"><FolderColorMenu value={currentFolderColor} pending={colorPendingIds.has(`folder:${data.folder.id}`)} onChange={(color) => void colorItem("folder", data.folder, color)} /></DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : null}
+                  {data.canWrite && !isPrivateFolder ? (
+                    <Button type="button" variant="secondary" onClick={() => setImportOpen(true)} className="h-10 rounded-[11px]">
+                      <FileDown className="h-4 w-4" /> Import
+                    </Button>
+                  ) : null}
+                  {!data.canUpload ? (
                     <span className="inline-flex h-10 items-center gap-2 rounded-[11px] bg-[#e9eeea] px-3 text-[11px] font-[700] text-[#627067]">
                       <LockKeyhole className="h-3.5 w-3.5" />
                       {context === "user-shared"
                         ? "Read-only folder"
                         : "Read-only workspace"}
                     </span>
+                  ) : !data.canWrite ? (
+                    <Button type="button" className="h-10 rounded-[11px]" onClick={() => inputRef.current?.click()}>
+                      <Upload className="h-4 w-4" /> Upload Files
+                    </Button>
                   ) : (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -801,6 +1060,9 @@ export function StageTwoFolderWorkspace({
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="min-w-[200px]">
                         <DropdownMenuLabel>Add to folder</DropdownMenuLabel>
+                        <DropdownMenuItem onSelect={() => { setFolderError(undefined); setFolderDialogOpen(true); }}>
+                          <FolderPlus className="h-4 w-4" /> New Folder
+                        </DropdownMenuItem>
                         <DropdownMenuItem onSelect={() => inputRef.current?.click()}>
                           <Upload className="h-4 w-4" /> Upload Files
                         </DropdownMenuItem>
@@ -856,6 +1118,7 @@ export function StageTwoFolderWorkspace({
               ref={inputRef}
               type="file"
               multiple
+              disabled={!data.canUpload}
               className="hidden"
               onChange={(event) => {
                 if (event.target.files) void uploadFiles(event.target.files);
@@ -863,17 +1126,18 @@ export function StageTwoFolderWorkspace({
               }}
             />
 
-            <div className="border-b border-[#e9eee9] bg-[#fbfcfb] px-5 py-3 sm:px-8">
-              <div className="relative max-w-[420px]">
+            <div className="flex flex-wrap items-center gap-3 border-b border-[#e9eee9] bg-[#fbfcfb] px-5 py-3 sm:px-8">
+              <div className="relative min-w-[180px] max-w-[420px] flex-1">
                 <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#829087]" />
                 <Input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search files in this folder..."
-                  aria-label="Search files in this folder"
+                  placeholder="Search folders and files..."
+                  aria-label="Search folders and files"
                   className="h-10 rounded-[11px] border-[#dce3dc] bg-white pl-10 shadow-none"
                 />
               </div>
+              <FolderColorFilterControl value={colorFilter} onChange={setColorFilter} />
             </div>
           </div>
 
@@ -884,12 +1148,12 @@ export function StageTwoFolderWorkspace({
               if (!isFileDrag(event)) return;
               event.preventDefault();
               dragDepth.current += 1;
-              if (data.canWrite) setDragging(true);
+              if (data.canUpload) setDragging(true);
             }}
             onDragOver={(event) => {
               if (!isFileDrag(event)) return;
               event.preventDefault();
-              event.dataTransfer.dropEffect = data.canWrite ? "copy" : "none";
+              event.dataTransfer.dropEffect = data.canUpload ? "copy" : "none";
             }}
             onDragLeave={(event) => {
               if (!isFileDrag(event)) return;
@@ -902,10 +1166,10 @@ export function StageTwoFolderWorkspace({
               event.preventDefault();
               dragDepth.current = 0;
               setDragging(false);
-              if (data.canWrite) void uploadFiles(event.dataTransfer.files);
+              if (data.canUpload) void uploadFiles(event.dataTransfer.files);
             }}
           >
-            {dragging && data.canWrite ? (
+            {dragging && data.canUpload ? (
               <div className="absolute inset-3 z-30 flex flex-col items-center justify-center rounded-[22px] border-2 border-dashed border-[#2b8056] bg-[#eaf5ed]/95 text-center text-[#216643] shadow-[0_18px_44px_rgba(25,103,67,0.12)]">
                 <UploadCloud className="h-10 w-10" />
                 <p className="mt-3 text-[17px] font-[760]">Drop files to upload to {data.folder.name}</p>
@@ -935,92 +1199,79 @@ export function StageTwoFolderWorkspace({
               </div>
             ) : null}
 
-            {visibleFiles.length === 0 ? (
+            {pinnedItems.length > 0 ? (
+              <section aria-label="Pinned items" className="mb-6">
+                <h2 className="mb-3 flex items-center gap-2 text-[12px] font-[750] uppercase tracking-wide text-[#24764e]"><Pin className="size-4" /> Pinned <span className="text-[#758078]">({pinnedItems.length})</span></h2>
+                <div className={cn(view === "grid" ? "grid grid-cols-[repeat(auto-fill,minmax(min(100%,210px),1fr))] items-start gap-4" : "overflow-hidden rounded-[18px] border border-[#e0e6e1] bg-white")}>
+                  {pinnedItems.map((entry) => entry.kind === "folder" ? renderFolder(entry.item) : renderFile(entry.item))}
+                </div>
+              </section>
+            ) : null}
+
+            {unpinnedFolders.length > 0 ? (
+              <section aria-label="Subfolders" className="mb-6">
+                <h2 className="mb-3 text-[12px] font-[750] uppercase tracking-wide text-[#758078]">Folders</h2>
+                <div className={cn(view === "grid" ? "grid grid-cols-[repeat(auto-fill,minmax(min(100%,210px),1fr))] gap-4" : "space-y-2")}>
+                  {unpinnedFolders.map(renderFolder)}
+                </div>
+              </section>
+            ) : null}
+
+            {visibleFiles.length === 0 && visibleFolders.length === 0 ? (
               <div className="flex min-h-[310px] flex-col items-center justify-center rounded-[20px] border border-dashed border-[#d7e0d8] bg-white/70 px-6 text-center">
                 <span className="grid size-14 place-items-center rounded-[17px] bg-[#edf5ef] text-[#397655]">
                   <FolderOpen className="h-7 w-7" />
                 </span>
                 <p className="mt-4 text-[15px] font-[720] text-[#364239]">
-                  {query ? "No matching files" : "No files yet"}
+                  {query || colorFilter !== "ALL" ? "No matching folders or files" : "This folder is empty"}
                 </p>
                 <p className="mt-1 max-w-[360px] text-[12px] leading-5 text-[#77827a]">
-                  {query
-                    ? "Try another file name."
+                  {query || colorFilter !== "ALL"
+                    ? "Try another name or colour filter."
                     : data.canWrite
-                      ? `Drag files here or use New to add files to ${data.folder.name}.`
-                      : "This folder does not contain any files yet."}
+                      ? `Drag files here or use New to add a folder or files to ${data.folder.name}.`
+                      : data.canUpload
+                        ? `Drag files here or choose Upload Files to add files to ${data.folder.name}.`
+                        : "This folder does not contain any folders or files yet."}
                 </p>
+                {colorFilter !== "ALL" || query ? <Button variant="secondary" className="mt-3" onClick={() => { setColorFilter("ALL"); setQuery(""); }}>Clear filters</Button> : null}
               </div>
-            ) : view === "grid" ? (
+            ) : unpinnedFiles.length === 0 ? null : view === "grid" ? (
               <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,210px),1fr))] gap-4">
-                {visibleFiles.map((file) => (
-                  <FileGalleryCard
-                    key={file.id}
-                    file={file}
-                    baseApi={baseApi}
-                    canWrite={data.canWrite}
-                    deleting={deletingId === file.id}
-                    onPreview={() => setPreviewFile(file)}
-                    onDelete={() => {
-                      setDeleteError(undefined);
-                      setFileToDelete(file);
-                    }}
-                  />
-                ))}
+                {unpinnedFiles.map(renderFile)}
               </div>
             ) : (
               <div className="overflow-hidden rounded-[18px] border border-[#e0e6e1] bg-white">
                 <div className="hidden grid-cols-[minmax(0,1fr)_120px_160px_110px_52px] gap-4 border-b border-[#e7ece8] bg-[#f8faf8] px-4 py-3 text-[10px] font-[750] uppercase tracking-[0.09em] text-[#778179] md:grid">
                   <span>Name</span><span>Type</span><span>Uploaded</span><span>Size</span><span />
                 </div>
-                {visibleFiles.map((file) => (
-                  <div key={file.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_44px] items-center gap-3 border-b border-[#edf1ee] px-4 py-3.5 last:border-0 md:grid-cols-[minmax(0,1fr)_120px_160px_110px_52px] md:gap-4">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-[#edf5ef] text-[#397655]"><FileKindIcon file={file} /></span>
-                      <div className="min-w-0">
-                        {isBrowserPreviewable(file) ? (
-                          <button
-                            type="button"
-                            onClick={() => setPreviewFile(file)}
-                            className="block max-w-full truncate text-left text-[13px] font-[680] text-[#253028] hover:text-brand hover:underline"
-                            title={file.name}
-                          >
-                            {file.name}
-                          </button>
-                        ) : (
-                          <a
-                            href={`${baseApi}/files/${file.id}/download`}
-                            className="block truncate text-[13px] font-[680] text-[#253028] hover:text-brand hover:underline"
-                            title={file.name}
-                          >
-                            {file.name}
-                          </a>
-                        )}
-                        <p className="truncate text-[10px] text-[#879188] md:hidden">{file.uploadedBy} · {formatBytes(file.size)}</p>
-                      </div>
-                    </div>
-                    <span className="hidden text-[11px] text-[#6f7b72] md:block">{getExtension(file.name)}</span>
-                    <span className="hidden text-[11px] leading-4 text-[#6f7b72] md:block">{formatUploadedDate(file.uploadedAt, true)}<span className="block truncate text-[10px] text-[#8b958e]" title={file.uploadedBy}>{file.uploadedBy}</span></span>
-                    <span className="hidden text-[11px] text-[#6f7b72] md:block">{formatBytes(file.size)}</span>
-                    <FileActionMenu
-                      file={file}
-                      baseApi={baseApi}
-                      canWrite={data.canWrite}
-                      deleting={deletingId === file.id}
-                      onPreview={() => setPreviewFile(file)}
-                      onDelete={() => {
-                        setDeleteError(undefined);
-                        setFileToDelete(file);
-                      }}
-                    />
-                  </div>
-                ))}
+                {unpinnedFiles.map(renderFile)}
               </div>
             )}
           </div>
         </CardContent>
       </Card>
 
+      {folderDialogOpen ? <NewFolderDialog open pending={folderPending} error={folderError} parentName={data.folder.name} onClose={() => setFolderDialogOpen(false)} onCreate={(name) => void createFolder(name)} /> : null}
+      <ConfirmationDialog
+        isOpen={Boolean(folderToDelete)} title="Delete folder?"
+        description={folderToDelete ? `Delete “${folderToDelete.name}” and all subfolders and files inside it? This cannot be undone.` : ""}
+        confirmLabel="Delete folder" tone="destructive" pending={folderPending} error={folderError}
+        onConfirm={() => void deleteFolder()} onClose={() => { if (!folderPending) setFolderToDelete(undefined); }}
+      />
+
+      {importOpen ? (
+        <StageTwoImportDialog
+          projectId={data.project.id}
+          folders={[data.folder]}
+          initialFolderId={data.folder.id}
+          onClose={() => setImportOpen(false)}
+          onImported={(folderId, importedFiles) => {
+            if (folderId === data.folder.id) setFiles(importedFiles);
+            else setFolders((current) => current.map((folder) => folder.id === folderId ? { ...folder, fileCount: importedFiles.length } : folder));
+          }}
+        />
+      ) : null}
       {previewFile ? (
         <AssetPreviewDialog
           key={previewFile.attachmentId}

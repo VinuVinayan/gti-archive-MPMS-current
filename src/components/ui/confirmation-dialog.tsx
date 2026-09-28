@@ -2,6 +2,7 @@
 
 import { Loader2, X } from "lucide-react";
 import { createPortal } from "react-dom";
+import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +20,7 @@ type ConfirmationDialogProps = {
   error?: string;
   onConfirm: () => void;
   onClose: () => void;
+  children?: ReactNode;
 };
 
 export function ConfirmationDialog({
@@ -34,6 +36,7 @@ export function ConfirmationDialog({
   error,
   onConfirm,
   onClose,
+  children,
 }: ConfirmationDialogProps) {
   if (!isOpen || typeof document === "undefined") {
     return null;
@@ -71,6 +74,7 @@ export function ConfirmationDialog({
         </CardHeader>
 
         <CardContent className="px-6 pb-6 pt-0 sm:px-7 sm:pb-7">
+          {children}
           {error ? (
             <div className="mb-5 rounded-[18px] border border-[#f0c9c7] bg-[#fff2f1] px-4 py-3 text-[13px] text-[#bb4d49]">
               {error}

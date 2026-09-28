@@ -15,6 +15,7 @@ import {
   createContactDirectoryEntry,
   getProjectInquiryPageData,
   searchProjectInquiryHistorySuggestions,
+  searchProjectInquiryPartyOptions,
   type CompleteProjectInquiryInput,
 } from "../src/lib/project-inquiry";
 import { prisma } from "../src/lib/prisma";
@@ -151,6 +152,7 @@ async function main() {
 
   const mainProject = await createProject("inquiry-main-project", "Rich Inquiry");
   const minimalProject = await createProject("inquiry-minimal-project", "Minimal Inquiry");
+  const companyOnlyProject = await createProject("inquiry-company-only-project", "Company Only Inquiry");
   const failureProject = await createProject("inquiry-failure-project", "Failure Inquiry");
   const foreignProject = await createProject("inquiry-foreign-project", "Foreign Asset");
   const relatedUser = {
@@ -254,12 +256,82 @@ async function main() {
     superAdmin,
     mainProject.id,
     {
+      kind: "CLIENT",
       name: "Manual Client Entity",
       company: "Manual Client Company",
+      companyEmail: " COMPANY@Example.Test ",
+      companyPhone: "+1 (202) 555-0123",
+      companyWebsite: "client.example.test",
+      position: "Account Manager",
+      phone: "+971 50 123 4567",
       email: " CLIENT-CONTACT@Example.Test ",
     },
   );
   assert("contact" in clientContactResult, "Manual client contact must be created.");
+  assert(
+    clientContactResult.contact.companyEmail === "company@example.test" &&
+      clientContactResult.contact.companyPhone === "+12025550123" &&
+      clientContactResult.contact.companyWebsite === "https://client.example.test/" &&
+      clientContactResult.contact.phone === "+971501234567",
+    "Company details must persist separately from representative details.",
+  );
+  const companySearch = await searchProjectInquiryPartyOptions(superAdmin, mainProject.id, "company@example.test");
+  assert(companySearch.some((contact) => contact.id === clientContactResult.contact.id), "Clients must be searchable by company email.");
+  const missingCompany = await createContactDirectoryEntry(superAdmin, mainProject.id, {
+    kind: "CLIENT", name: "Representative", email: "rep@example.test", phone: "+971501234567", position: "Manager",
+  });
+  assert("error" in missingCompany && missingCompany.fieldErrors?.company, "New clients must require a company on the server.");
+  const companyOnlyClient = await createContactDirectoryEntry(superAdmin, mainProject.id, {
+    kind: "CLIENT", company: "Company Only Client",
+  });
+  assert("contact" in companyOnlyClient && companyOnlyClient.contact.name === "" &&
+    companyOnlyClient.contact.email === null && companyOnlyClient.contact.phone === null && companyOnlyClient.contact.position === null,
+    "A company client must save with only the company name and no invented representative.");
+  assert((await searchProjectInquiryPartyOptions(superAdmin, mainProject.id, "Company Only Client")).some((contact) => contact.id === companyOnlyClient.contact.id), "Company-only clients remain searchable.");
+  const companyBeneficiary = await createContactDirectoryEntry(superAdmin, mainProject.id, {
+    kind: "CONTACT", entityType: "COMPANY", company: "Beneficiary Company",
+    name: "Beneficiary Representative", email: "representative@example.test",
+    phone: "+971501234567", position: "Director",
+    companyEmail: "beneficiary@example.test", companyPhone: "+12025550123", companyWebsite: "beneficiary.example.test",
+  });
+  assert("contact" in companyBeneficiary && companyBeneficiary.contact.entityType === "COMPANY", "Beneficiaries must support company records.");
+  const personClient = await createContactDirectoryEntry(superAdmin, mainProject.id, {
+    kind: "CLIENT", entityType: "PERSON", name: "Individual Client", company: "Client Employer",
+    companyEmail: "old-company@example.test", companyPhone: "not a phone", companyWebsite: "not a website",
+  });
+  assert("contact" in personClient && personClient.contact.entityType === "PERSON" &&
+    personClient.contact.company === "Client Employer" && personClient.contact.companyEmail === null &&
+    personClient.contact.companyPhone === null && personClient.contact.companyWebsite === null &&
+    personClient.contact.email === null && personClient.contact.phone === null && personClient.contact.position === null,
+    "Person clients must save with name and company alone and discard hidden company contact fields.");
+  const personWithoutCompany = await createContactDirectoryEntry(superAdmin, mainProject.id, { kind: "CLIENT", entityType: "PERSON", name: "Individual Client" });
+  assert("error" in personWithoutCompany && personWithoutCompany.fieldErrors?.company, "A person client's company is required.");
+  const companyOnlyResult = await completeProjectInquiry(superAdmin, {
+    projectId: companyOnlyProject.id,
+    client: { source: ProjectInquiryPartySource.MANUAL_CONTACT, id: companyOnlyClient.contact.id },
+    finalBeneficiaries: [{ source: ProjectInquiryPartySource.MANUAL_CONTACT, id: companyBeneficiary.contact.id }],
+  });
+  assert("success" in companyOnlyResult, "Stage 1 must accept a company-only client.");
+  const savedCompanyOnly = (await getProjectInquiryPageData(superAdmin, companyOnlyProject.id)).inquiry?.client;
+  assert(savedCompanyOnly?.entityType === "COMPANY" && savedCompanyOnly.company === "Company Only Client" && savedCompanyOnly.name === "", "Company-only clients must survive saving and reloading the inquiry.");
+  const personCompanyResult = await completeProjectInquiry(superAdmin, {
+    projectId: minimalProject.id,
+    client: { source: ProjectInquiryPartySource.MANUAL_CONTACT, id: personClient.contact.id },
+    finalBeneficiaries: [{ source: ProjectInquiryPartySource.MANUAL_CONTACT, id: companyBeneficiary.contact.id }],
+  });
+  assert("success" in personCompanyResult, "A person client and company beneficiary must save together.");
+  const typedParties = (await getProjectInquiryPageData(superAdmin, minimalProject.id)).inquiry;
+  assert(typedParties?.client?.entityType === "PERSON" && typedParties.client.name === "Individual Client" &&
+    typedParties.finalBeneficiaries[0]?.entityType === "COMPANY" &&
+    typedParties.finalBeneficiaries[0].company === "Beneficiary Company" &&
+    typedParties.finalBeneficiaries[0].companyEmail === "beneficiary@example.test" &&
+    typedParties.finalBeneficiaries[0].companyPhone === "+12025550123" &&
+    typedParties.finalBeneficiaries[0].companyWebsite === "https://beneficiary.example.test/" &&
+    typedParties.finalBeneficiaries[0].name === "Beneficiary Representative",
+    "Reloaded clients and beneficiaries must preserve their type and separate company/individual fields.");
+  await prisma.contactDirectoryEntry.update({ where: { id: companyBeneficiary.contact.id }, data: { entityType: "PERSON" } });
+  assert((await getProjectInquiryPageData(superAdmin, minimalProject.id)).inquiry?.finalBeneficiaries[0].entityType === "COMPANY",
+    "A saved beneficiary's type must remain snapshotted after directory changes.");
   const beneficiaryContactResult = await createContactDirectoryEntry(
     superAdmin,
     mainProject.id,
@@ -386,6 +458,18 @@ async function main() {
       attachments: true,
     },
   });
+  const savedClient = persisted.parties.find((party) => party.role === "CLIENT");
+  assert(savedClient?.snapshotEntityType === "COMPANY" && savedClient.snapshotCompany === "Manual Client Company" &&
+    savedClient.snapshotCompanyEmail === "company@example.test" &&
+    savedClient.snapshotCompanyPhone === "+12025550123" &&
+    savedClient.snapshotCompanyWebsite === "https://client.example.test/" &&
+    savedClient.snapshotName === "Manual Client Entity" &&
+    savedClient.snapshotEmail === "client-contact@example.test" &&
+    savedClient.snapshotPhone === "+971501234567" &&
+    savedClient.snapshotPosition === "Account Manager", "All eight client fields must survive saving Stage 1.");
+  await prisma.contactDirectoryEntry.update({ where: { id: clientContactResult.contact.id }, data: { companyEmail: "changed@example.test" } });
+  const reloadedClient = (await getProjectInquiryPageData(superAdmin, mainProject.id)).inquiry?.client;
+  assert(reloadedClient?.companyEmail === "company@example.test" && reloadedClient.companyPhone === "+12025550123" && reloadedClient.companyWebsite === "https://client.example.test/", "Saved projects must retain their own company contact snapshot after directory changes.");
   assert(
     persisted.initialBrief === "<p>Persisted initial brief</p>",
     "Initial Brief must persist.",
@@ -706,6 +790,7 @@ main()
           in: [
             "inquiry-main-project",
             "inquiry-minimal-project",
+            "inquiry-company-only-project",
             "inquiry-failure-project",
             "inquiry-foreign-project",
           ],

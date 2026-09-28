@@ -88,6 +88,7 @@ export type UserProjectListItem = {
 };
 
 type UserTaskStateInput = {
+  completionRequestedAt?: Date | null;
   approvedAttachmentId: string | null;
   taskerStage: {
     status: StageStatus;
@@ -115,6 +116,10 @@ export function deriveUserTaskDisplayState(
       label: "Completed",
       dotTone: "green",
     };
+  }
+
+  if (task.completionRequestedAt) {
+    return { status: "WAITING_FOR_REVIEW", label: "Waiting for Review", dotTone: "purple" };
   }
 
   const latestRevision = task.taskerStage.revisions[0];
@@ -302,6 +307,7 @@ export async function getUserProjectsList(
             select: {
               name: true,
               approvedAttachmentId: true,
+              completionRequestedAt: true,
               updatedAt: true,
               taskerStage: {
                 select: {

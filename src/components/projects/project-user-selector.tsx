@@ -206,7 +206,7 @@ export function ProjectUserSelector({
               className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-full bg-[#f1f4f0] py-1 pl-1 pr-2 text-[13px] font-[600] text-[#1c271f]"
             >
               <UserAvatar user={user} />
-              <span className="max-w-[190px] truncate">{user.name}</span>
+              <span className="max-w-[190px] min-w-0 whitespace-normal break-words">{user.name}</span>
               <button
                 type="button"
                 onClick={(event) => {
@@ -287,7 +287,7 @@ export function ProjectUserSelector({
                 >
                   <UserAvatar user={user} size="large" />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[14px] font-[650] text-[#172019]">
+                    <span className="block min-w-0 whitespace-normal break-words text-[14px] font-[650] text-[#172019]">
                       {user.name}
                     </span>
                     <span className="block truncate text-[12px] text-[#7a847c]">

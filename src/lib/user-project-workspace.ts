@@ -16,6 +16,7 @@ import {
   type ProjectAccessUser,
 } from "@/lib/projects";
 import { prisma, withPrismaRetry } from "@/lib/prisma";
+import { getProjectResearchAccess, researchAccessProjectSelect } from "@/lib/project-research-access";
 import {
   deriveUserTaskDisplayState,
   type UserTaskDisplayState,
@@ -33,6 +34,7 @@ export type UserProjectWorkspaceData = {
     name: "Brief" | "Tech";
     folderId: string | null;
     fileCount: number;
+    canUpload: boolean;
     href: string | null;
   }>;
   myPrivateFolder: {
@@ -85,6 +87,7 @@ export async function getUserProjectWorkspace(
       },
       relationLoadStrategy: "join",
       select: {
+        ...researchAccessProjectSelect,
         id: true,
         name: true,
         description: true,
@@ -98,6 +101,7 @@ export async function getUserProjectWorkspace(
               where: { projectId },
               take: 1,
               select: {
+                id: true,
                 folders: {
                   where: {
                     systemKey: {
@@ -144,7 +148,7 @@ export async function getUserProjectWorkspace(
           },
         },
         privateFolders: {
-          where: { ownerUserId: currentUser.id },
+          where: { ownerUserId: currentUser.id, parentFolderId: null },
           select: { id: true, ownerUserId: true },
         },
         conceptFolders: {
@@ -155,6 +159,7 @@ export async function getUserProjectWorkspace(
             name: true,
             workflowStageKey: true,
             approvedAttachmentId: true,
+            completionRequestedAt: true,
             updatedAt: true,
             taskerStage: {
               select: {
@@ -201,6 +206,13 @@ export async function getUserProjectWorkspace(
       name,
       folderId: folder?.id ?? null,
       fileCount: folder?._count.files ?? 0,
+      canUpload: Boolean(folder && project.owner && getProjectResearchAccess(currentUser, {
+        projectId: project.id,
+        workspaceId: project.owner.researchWorkspaces[0].id,
+        workspaceOwnerUserId: project.owner.id,
+        folderSystemKey: key,
+        project,
+      }).canUpload),
       href: folder
         ? `/projects/${project.id}/workspace/shared/${folder.id}`
         : null,

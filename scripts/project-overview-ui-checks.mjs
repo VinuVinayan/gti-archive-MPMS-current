@@ -40,10 +40,12 @@ assert(
   "Project Overview must reuse the compact shared summary instead of a vertical local design.",
 );
 assert(
-  summary.includes("people.slice(0, 1)") &&
+  summary.includes("people.slice(0, visibleCount)") &&
+    summary.includes("visibleCount = 1") &&
+    /people=\{executors\}[\s\S]*?visibleCount=\{3\}/.test(summary) &&
     summary.includes("people.length - visiblePeople.length") &&
     summary.includes("+{remainingCount}"),
-  "Shared people summaries must display one name followed by +N whenever more people exist.",
+  "Shared people summaries must display three executor names, default to one for other groups, and show +N for additional people.",
 );
 assert(
   summary.includes("DropdownMenuTrigger asChild") &&

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
@@ -433,6 +434,32 @@ export async function readTextObject({
   }
 
   return response.Body.transformToString("utf-8");
+}
+
+export async function copyStoredObject(input: {
+  sourceBucket: string;
+  sourceKey: string;
+  bucket: string;
+  storageKey: string;
+}) {
+  await getS3Client("regional").send(new CopyObjectCommand({
+    Bucket: input.bucket,
+    Key: input.storageKey,
+    CopySource: `${input.sourceBucket}/${encodeURIComponent(input.sourceKey)}`,
+  }));
+}
+
+export async function writeTextObject(input: {
+  bucket: string;
+  storageKey: string;
+  content: string;
+}) {
+  await getS3Client("regional").send(new PutObjectCommand({
+    Bucket: input.bucket,
+    Key: input.storageKey,
+    Body: Buffer.from(input.content, "utf8"),
+    ContentType: "text/plain",
+  }));
 }
 
 export async function getObjectMetadata(

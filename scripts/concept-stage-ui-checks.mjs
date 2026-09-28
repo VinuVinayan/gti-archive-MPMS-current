@@ -255,10 +255,10 @@ assert(
     workspace.includes("completionDialogOpen &&\n          stageCompletionReady") &&
     concepts.includes("canCompleteProjectConceptStage(user, managerContext)") &&
     concepts.includes("unapprovedConcepts.length > 0") &&
-    concepts.includes("Every Stage 3 concept must have an Approved Concept") &&
-    workspace.includes("isEmptyStageThree || isEmptyStageFour || allConceptsApproved") &&
-    concepts.includes("Only a project owner, co-owner, or administrator can complete Stage 3."),
-  "Stages 3 and 4 may be skipped only while empty; otherwise completion must wait for every created concept and remain owner-authorized.",
+    concepts.includes("Every Stage 3 task must have an approved file or be completed without a file") &&
+    workspace.includes("isEmptyStageThree || isEmptyStageFour || allConceptsComplete") &&
+    concepts.includes("Only the project owner or an administrator can complete Stage 3."),
+  "Normal stage completion must wait for finished tasks and remain owner-authorized.",
 );
 assert(
   workspace.includes("No Stage 3 concepts have been created") &&

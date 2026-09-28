@@ -1,5 +1,7 @@
 "use client";
 
+import { FileThumbnail } from "@/components/projects/file-thumbnail";
+
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { ProjectFileChecklistRequestWorkflowStatus } from "@prisma/client";
@@ -9,7 +11,6 @@ import {
   ChevronRight,
   CircleAlert,
   Download,
-  FileImage,
   Loader2,
   Plus,
   Send,
@@ -166,7 +167,7 @@ function ResponseSummary({ data }: { data: StageFiveChecklistRequestData }) {
         <div className="space-y-2">
           {attachments.map((attachment) => (
             <div key={attachment.id} className="flex items-center gap-3 rounded-[13px] border border-[#e0e8e1] bg-white px-4 py-3">
-              <FileImage className="h-4 w-4 shrink-0 text-[#438060]" />
+              <FileThumbnail fileName={attachment.name} mimeType={attachment.mimeType} previewPath={`/api/project-assets/${attachment.id}/preview`} />
               <span className="min-w-0 truncate text-[13px] font-[680] text-[#2b372f]">
                 {attachment.name}
               </span>
@@ -471,7 +472,7 @@ export function StageFiveRequestWorkspace({ data }: { data: StageFiveChecklistRe
                   Requested file
                 </p>
                 <div className="mt-1.5 flex min-w-0 items-center gap-2">
-                  <FileImage className="h-4 w-4 shrink-0 text-[#438060]" />
+                  <FileThumbnail fileName={data.file.name} mimeType={data.file.mimeType} previewPath={sourcePreviewPath} />
                   <p className="truncate text-[14px] font-[700] text-[#28342c]">{data.file.name}</p>
                 </div>
               </div>

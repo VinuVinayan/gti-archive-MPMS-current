@@ -26,6 +26,7 @@ import {
 import { getProjectResearchPageData } from "@/lib/project-research";
 import { isBusinessAdministratorRole } from "@/lib/user-role-compatibility";
 import { canOpenImplementedWorkflowStage } from "@/lib/workflow-stage-access";
+import { getProjectStageAccessRecordById } from "@/lib/project-stage-data";
 
 type StageTwoPageUser = Awaited<ReturnType<typeof requireUser>>;
 
@@ -135,7 +136,8 @@ export default async function StageTwoPage({
   const user = await requireUser();
 
   if (!isBusinessAdministratorRole(user.role)) {
-    redirect(`/projects/${slug}`);
+    const project = await getProjectStageAccessRecordById(slug);
+    if (project?.ownerId !== user.id && !project?.coOwners.some((record) => record.userId === user.id)) redirect(`/projects/${slug}`);
   }
 
   const userPromise = Promise.resolve(user);

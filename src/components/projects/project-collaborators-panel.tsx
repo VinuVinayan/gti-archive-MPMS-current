@@ -141,7 +141,7 @@ function CollaboratorCompactRow({
       </div>
       <div className="min-w-0">
         <div className="flex min-w-0 items-center gap-2">
-          <p className={`truncate font-semibold leading-5 text-[#111712] ${isModal ? "text-[14px]" : "text-[12px]"}`}>
+          <p className={`min-w-0 whitespace-normal break-words font-semibold leading-5 text-[#111712] ${isModal ? "text-[14px]" : "text-[12px]"}`}>
             {collaborator.name}
           </p>
         </div>
@@ -170,7 +170,7 @@ function ExecutorCompactRow({
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
-          <p className="truncate text-[13px] font-[800] leading-5 text-[#111712]">
+          <p className="min-w-0 whitespace-normal break-words text-[13px] font-[800] leading-5 text-[#111712]">
             {executor.name}
           </p>
         </div>

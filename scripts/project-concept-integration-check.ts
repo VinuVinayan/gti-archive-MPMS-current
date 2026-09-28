@@ -1365,7 +1365,7 @@ async function main() {
     const prematureCompletion = await completeStageThreeConcepts(owner, { projectId });
     check(
       isErrorResult(prematureCompletion) &&
-        prematureCompletion.error.includes("Every Stage 3 concept") &&
+        prematureCompletion.error.includes("Every Stage 3 task") &&
         prematureCompletion.error.includes(conceptB.folder.name),
       "Stage 3 completion must reject concepts that are still awaiting approval",
     );
@@ -1972,7 +1972,7 @@ async function main() {
     });
     check(
       isErrorResult(collisionCompletion) &&
-        collisionCompletion.error.includes("Every Stage 3 concept") &&
+        collisionCompletion.error.includes("Every Stage 3 task") &&
         collisionCompletion.error.includes(collisionControlConcept.folder.name),
       "Stage 3 completion must report pending concepts before attempting promotion",
     );

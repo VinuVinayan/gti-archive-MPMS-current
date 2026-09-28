@@ -46,7 +46,30 @@ RESEND_API_KEY=
 RESEND_FROM_EMAIL=
 APP_URL=https://your-production-host.example
 CRON_SECRET=
+SLAVOMIR_APPROVAL_EMAIL=
 ```
+
+The initial Marketing Director approval created after Stage 5 displays **Slavomir
+Kluziak**. Set `SLAVOMIR_APPROVAL_EMAIL` separately in each deployment:
+
+- **dev/testing:** your test inbox.
+- **main/production:** Slavomir's real inbox.
+- **local development:** add the test inbox to `.env.local`.
+
+This is a server-side variable; do not prefix it with `NEXT_PUBLIC_`. Restart or
+redeploy after changing it. The app uses the current value for each explicit
+**Send Approval Request**, **Resend Approval Request**, or **Retry**, including existing approvals.
+A missing or invalid value blocks this approval; there is no fallback address.
+Other approvers and handover recipients keep their selected addresses. Requests
+still require a click for every step in the chain.
+
+Rejected Stage 6 approval steps offer **Resend Approval Request**. The sender can
+select updated production files and shared information before sending. Each
+resubmission keeps the previous rejection, comments, recipient, and shared
+snapshot in history. Earlier approvals stay intact, old external links are
+invalidated, and later approvers still wait for an explicit send. A failed email
+delivery uses **Retry** on the new request. Closed projects and completed or
+handed-over workflows cannot be resubmitted.
 
 Recurring Stage 5 and Stage 7 request reminders require a scheduler to call
 `GET /api/internal/request-reminders` with `Authorization: Bearer $CRON_SECRET`.
@@ -64,6 +87,34 @@ To test faster uploads for global users:
    - `upload:total`
 
 If acceleration is working, the upload host should change from the regional S3 hostname to the S3 accelerate hostname.
+
+## Undoing a Stage 3 or Stage 4 skip
+
+The project owner or an administrator can open a skipped stage and choose
+**Undo Skip**. An executor must be added through **Edit Project** first if the
+project has none. Reopened tasks still require an executor assignment.
+
+Reopening locks the later stages again. It is blocked when later tasks, direct
+Stage 5 uploads, checklist changes, information requests, saved drafts, or
+production work exist, and after Stage 5 is completed. Only untouched checklist
+entries automatically created by skipping Stage 4 can be reset; the original
+Stage 3 files and approvals remain intact. The server checks these conditions
+again when confirming and records the action in the project activity log.
+
+## Revoking task completion without a file
+
+For Stage 3 and Stage 4 tasks marked **Completed · No file**, the project owner
+or an administrator can choose **Revoke Completion** in the task header. This
+reopens the task for discussion and submissions. Executor acceptance and existing
+files are preserved. If the task has no valid executor, the confirmation requires
+choosing a current project executor, who must then accept the brief.
+
+If the workflow stage is already completed, reopening also relocks later stages.
+The same downstream safety checks as **Undo Skip** apply. Untouched generated
+Stage 5 checklists may be rebuilt; original files and sibling task approvals stay
+intact. Blocked actions display the reason. The task discussion records who
+revoked completion, and the server rechecks permissions and dependencies when
+confirming. Task-only reopening leaves the current workflow stage open.
 
 ## Learn More
 

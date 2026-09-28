@@ -118,13 +118,26 @@ function PartyDetails({
   label: string;
   party: ProjectInquiryPartySelection | null | undefined;
 }) {
-  const details = party
+  const displayName = party?.entityType === "COMPANY"
+    ? party.company || party.name
+    : party?.name ?? "";
+  const details = party?.entityType === "COMPANY"
     ? [
-        { label: "Company", value: party.company },
-        { label: "Position", value: party.position },
+        { label: "Company Name", value: party.company },
+        { label: "Company Email ID", value: party.companyEmail, icon: Mail },
+        { label: "Company Contact Number", value: party.companyPhone, icon: Phone },
+        { label: "Company Website", value: party.companyWebsite },
+        { label: "Contact Person / Representative", value: party.name },
+        { label: "Representative Email", value: party.email, icon: Mail },
+        { label: "Representative Contact Number", value: party.phone, icon: Phone },
+        { label: "Representative Designation", value: party.position },
+      ]
+    : party ? [
+        { label: "Company Name (if applicable)", value: party.company },
         { label: "Email", value: party.email, icon: Mail },
-        { label: "Phone", value: party.phone, icon: Phone },
-      ].filter((item) => item.value)
+        { label: "Contact Number", value: party.phone, icon: Phone },
+        { label: "Designation", value: party.position },
+      ]
     : [];
 
   return (
@@ -136,9 +149,12 @@ function PartyDetails({
         <>
           <div className="mt-3 flex items-center gap-3">
             <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#eaf3ec] text-[12px] font-[760] text-[#2f7450]">
-              {getInitials(party.name)}
+              {getInitials(displayName)}
             </span>
-            <p className="text-[15px] font-[720] text-[#202a22]">{party.name}</p>
+            <div className="min-w-0">
+              <p className="whitespace-normal break-words text-[15px] font-[720] text-[#202a22]">{displayName}</p>
+              <p className="mt-0.5 text-[11px] text-[#7b857e]">{party.entityType === "COMPANY" ? "Company" : "Person"}</p>
+            </div>
           </div>
           {details.length ? (
             <dl className="mt-4 grid gap-3 text-[12px] sm:grid-cols-2">
@@ -149,7 +165,7 @@ function PartyDetails({
                     <dt className="text-[#849087]">{item.label}</dt>
                     <dd className="mt-0.5 flex min-w-0 items-center gap-1.5 font-[620] text-[#3b473e]">
                       {Icon ? <Icon className="h-3.5 w-3.5 shrink-0 text-[#5f7969]" /> : null}
-                      <span className="truncate">{item.value}</span>
+                      <span className="min-w-0 whitespace-normal break-words">{item.value || <NotProvided />}</span>
                     </dd>
                   </div>
                 );
@@ -291,7 +307,7 @@ export function StageOneReadOnlyView({
 
       <StageOneViewSection title="Client Information">
         <div className="grid gap-4 lg:grid-cols-2">
-          <PartyDetails label="Client Name" party={inquiry?.client} />
+          <PartyDetails label="Client" party={inquiry?.client} />
           <div className="grid gap-4">
             {inquiry?.finalBeneficiaries.length ? (
               inquiry.finalBeneficiaries.map((beneficiary, index) => (

@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ChevronRight,
   File,
+  FileDown,
   Folder,
   FolderKey,
   Grid2X2,
@@ -23,17 +24,26 @@ import {
   LockKeyhole,
   Loader2,
   Plus,
+  Pin,
+  MoreVertical,
   SlidersHorizontal,
   Trash2,
   UploadCloud,
-  X,
 } from "lucide-react";
 
 import {
   completeProjectResearchStageAction,
   createProjectResearchFolderAction,
   deleteProjectResearchFolderAction,
+  setProjectFolderItemPinAction,
+  setProjectFolderItemColorAction,
 } from "@/app/(dashboard)/projects/[slug]/stages/2/actions";
+import { NewFolderDialog } from "@/components/projects/new-folder-dialog";
+import { FolderColorBadge, FolderColorFilterControl, FolderColorMenu } from "@/components/projects/folder-color-label";
+import { compareFolderColors, getFolderColor, matchesFolderColor, type FolderColor, type FolderColorFilter } from "@/lib/project-folder-colors-shared";
+import { FolderPinButton } from "@/components/projects/folder-pin-button";
+import { comparePinnedItems } from "@/lib/project-folder-pins-shared";
+import { StageTwoImportDialog } from "@/components/projects/stage-two-import-dialog";
 import { ProjectAccessRealtimeGuard } from "@/components/projects/project-access-realtime-guard";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { Button } from "@/components/ui/button";
@@ -45,7 +55,6 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ProjectResearchPageData } from "@/lib/project-research";
 import { uploadProjectResearchFile } from "@/lib/project-research-upload-client";
@@ -53,7 +62,7 @@ import { showErrorToast, showSuccessToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 type FolderView = "grid" | "list";
-type FolderSort = "business" | "name-asc" | "name-desc" | "files-desc";
+type FolderSort = "business" | "name-asc" | "name-desc" | "files-desc" | "colour";
 type FolderRecord = NonNullable<ProjectResearchPageData>["folders"][number];
 type FolderUploadSummary = { fileCount: number; progress: number };
 
@@ -62,11 +71,14 @@ const sortLabels: Record<FolderSort, string> = {
   "name-asc": "Name (A–Z)",
   "name-desc": "Name (Z–A)",
   "files-desc": "Most files",
+  colour: "Colour label",
 };
 
-function FolderArtwork({ action = false }: { action?: boolean }) {
+function FolderArtwork({ action = false, colorLabel = null }: { action?: boolean; colorLabel?: FolderColor | null }) {
+  const color = getFolderColor(colorLabel);
   return (
     <span
+      style={color ? { color: color.hex, backgroundColor: color.background, backgroundImage: "none" } : undefined}
       className={cn(
         "relative grid size-12 shrink-0 place-items-center rounded-[14px]",
         action
@@ -88,6 +100,10 @@ function FolderTile({
   upload,
   onDropFiles,
   onDelete,
+  onPin,
+  pinPending,
+  onColor,
+  colorPending,
 }: {
   folder: FolderRecord;
   view: FolderView;
@@ -97,6 +113,10 @@ function FolderTile({
   upload?: FolderUploadSummary;
   onDropFiles: (folder: FolderRecord, files: File[]) => void;
   onDelete: (folder: FolderRecord) => void;
+  onPin: (folder: FolderRecord) => void;
+  pinPending: boolean;
+  onColor: (folder: FolderRecord, color: FolderColor | null) => void;
+  colorPending: boolean;
 }) {
   const dragDepth = useRef(0);
   const [dragActive, setDragActive] = useState(false);
@@ -153,13 +173,15 @@ function FolderTile({
             : "items-center gap-4 px-4 py-3.5",
         )}
       >
-        <div className={cn("flex w-full items-center gap-4", canDelete && "pr-10")}>
-          <FolderArtwork />
+        <div className={cn("flex w-full items-center gap-4", canWrite ? "pr-20" : canDelete && "pr-10")}>
+          <FolderArtwork colorLabel={folder.colorLabel} />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[14px] font-[720] text-[#202a23]">{folder.name}</span>
             <span className="mt-1 block text-[11px] text-[#7c867f]">
               {folder.isSystem ? "System folder" : "Custom folder"}
+              {folder.pinnedAt ? <span className="ml-2 inline-flex items-center gap-1 text-[#24764e]"><Pin className="size-3" />Pinned</span> : null}
             </span>
+            <FolderColorBadge value={folder.colorLabel} className="mt-1" />
           </span>
           <ChevronRight className="h-4 w-4 shrink-0 text-[#8a948d] transition group-hover:translate-x-0.5 group-hover:text-brand" />
         </div>
@@ -167,23 +189,18 @@ function FolderTile({
           {upload ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <File className="h-3.5 w-3.5" />}
           {upload
             ? `Uploading ${upload.fileCount} ${upload.fileCount === 1 ? "file" : "files"} · ${upload.progress}%`
-            : `${folder.fileCount} ${folder.fileCount === 1 ? "file" : "files"}`}
+            : `${folder.folderCount} ${folder.folderCount === 1 ? "folder" : "folders"} · ${folder.fileCount} ${folder.fileCount === 1 ? "file" : "files"}`}
         </span>
       </Link>
-      {canDelete ? (
-        <button
-          type="button"
-          aria-label={`Delete ${folder.name}`}
-          title={`Delete ${folder.name}`}
-          disabled={Boolean(upload)}
-          onClick={() => onDelete(folder)}
-          className={cn(
-            "absolute z-20 grid size-9 place-items-center rounded-[10px] border border-[#ead9d7] bg-white text-[#ad514b] shadow-sm transition hover:border-[#d9a9a5] hover:bg-[#fff2f1] disabled:cursor-not-allowed disabled:opacity-45",
-            view === "grid" ? "right-4 top-4" : "right-4 top-1/2 -translate-y-1/2",
-          )}
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
+      {canWrite ? <FolderPinButton name={folder.name} pinned={Boolean(folder.pinnedAt)} pending={pinPending} onClick={() => onPin(folder)} className={cn("absolute z-20", view === "grid" ? "right-14 top-4" : "right-14 top-1/2 -translate-y-1/2")} /> : null}
+      {canWrite || canDelete ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild><button type="button" aria-label={`Actions for folder ${folder.name}`} className={cn("absolute z-20 grid size-9 place-items-center rounded-[10px] border border-[#dfe6df] bg-white text-[#68736b] hover:bg-[#f1f5f2]", view === "grid" ? "right-4 top-4" : "right-4 top-1/2 -translate-y-1/2")}><MoreVertical className="size-4" /></button></DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {canWrite ? <FolderColorMenu value={folder.colorLabel} pending={colorPending} onChange={(color) => onColor(folder, color)} /> : null}
+            {canDelete ? <DropdownMenuItem disabled={Boolean(upload)} onSelect={() => onDelete(folder)} variant="destructive"><Trash2 className="size-4" />Delete folder</DropdownMenuItem> : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
       ) : null}
       {dragActive ? (
         <span className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[#eaf5ed]/95 text-[#216643]">
@@ -191,64 +208,6 @@ function FolderTile({
           <span className="mt-2 text-[13px] font-[760]">Drop to upload</span>
         </span>
       ) : null}
-    </div>
-  );
-}
-
-function NewFolderDialog({
-  open,
-  pending,
-  error,
-  onClose,
-  onCreate,
-}: {
-  open: boolean;
-  pending: boolean;
-  error?: string;
-  onClose: () => void;
-  onCreate: (name: string) => void;
-}) {
-  const [name, setName] = useState("");
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-[#112118]/40 px-4 py-8 backdrop-blur-[2px]" role="dialog" aria-modal="true">
-      <Card className="w-full max-w-[500px] rounded-[24px] border border-[#dfe6df] shadow-[0_32px_80px_rgba(14,31,20,0.22)]">
-        <CardContent className="p-6 sm:p-7">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-[22px] font-[760] tracking-[-0.03em] text-[#162019]">Create a folder</h2>
-              <p className="mt-1 text-[13px] text-[#6f7a72]">Add a flat custom folder to the shared project workspace.</p>
-            </div>
-            <Button type="button" variant="secondary" size="icon" onClick={onClose} disabled={pending}>
-              <X className="h-4 w-4" /><span className="sr-only">Close</span>
-            </Button>
-          </div>
-          <label className="mt-6 block space-y-2">
-            <span className="text-[13px] font-[680] text-[#2d372f]">Folder name</span>
-            <Input
-              autoFocus
-              value={name}
-              maxLength={120}
-              onChange={(event) => setName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") onCreate(name);
-                if (event.key === "Escape") onClose();
-              }}
-              placeholder="e.g., Customer Interviews"
-              aria-invalid={Boolean(error)}
-              className={cn("h-12 rounded-[14px]", error && "border-[#c85c54]")}
-            />
-            {error ? <span className="block text-[12px] text-[#b84e48]">{error}</span> : null}
-          </label>
-          <div className="mt-7 flex justify-end gap-3">
-            <Button type="button" variant="secondary" onClick={onClose} disabled={pending}>Cancel</Button>
-            <Button type="button" onClick={() => onCreate(name)} disabled={pending}>
-              <Plus className="h-4 w-4" /> {pending ? "Creating..." : "Create folder"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
@@ -263,25 +222,32 @@ export function StageTwoWorkspace({
   const router = useRouter();
   const [view, setView] = useState<FolderView>("grid");
   const [sort, setSort] = useState<FolderSort>("business");
+  const [colorFilter, setColorFilter] = useState<FolderColorFilter>("ALL");
+  const [colorPendingIds, setColorPendingIds] = useState<Set<string>>(new Set());
+  const [pinPendingIds, setPinPendingIds] = useState<Set<string>>(new Set());
   const [folderRecords, setFolderRecords] = useState(data.folders);
   const [folderUploads, setFolderUploads] = useState<
     Record<string, FolderUploadSummary | undefined>
   >({});
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [folderError, setFolderError] = useState<string>();
   const [folderToDelete, setFolderToDelete] = useState<FolderRecord>();
   const [deleteError, setDeleteError] = useState<string>();
   const [isPending, startTransition] = useTransition();
 
   const folders = useMemo(() => {
-    const next = [...folderRecords];
+    const next = folderRecords.filter((folder) => matchesFolderColor(folder.colorLabel, colorFilter));
     const compareBusinessOrder = (left: FolderRecord, right: FolderRecord) =>
       left.sortOrder - right.sortOrder || left.name.localeCompare(right.name);
 
-    if (sort === "business") return next.sort(compareBusinessOrder);
+    if (sort === "colour") return next.sort((left, right) => Number(Boolean(right.pinnedAt)) - Number(Boolean(left.pinnedAt)) || compareFolderColors(left, right) || compareBusinessOrder(left, right));
+
+    if (sort === "business") return next.sort((left, right) => comparePinnedItems(left, right) || compareBusinessOrder(left, right));
     if (sort === "files-desc") {
       return next.sort(
         (left, right) =>
+          comparePinnedItems(left, right) ||
           right.fileCount - left.fileCount || compareBusinessOrder(left, right),
       );
     }
@@ -289,9 +255,33 @@ export function StageTwoWorkspace({
     return next.sort((left, right) => {
       const nameOrder =
         (sort === "name-desc" ? -1 : 1) * left.name.localeCompare(right.name);
-      return nameOrder || compareBusinessOrder(left, right);
+      return comparePinnedItems(left, right) || nameOrder || compareBusinessOrder(left, right);
     });
-  }, [folderRecords, sort]);
+  }, [folderRecords, sort, colorFilter]);
+
+  async function colorFolder(folder: FolderRecord, colorLabel: FolderColor | null) {
+    if (!data.sharedWorkspace.canWrite || colorPendingIds.has(folder.id)) return;
+    setColorPendingIds((current) => new Set(current).add(folder.id));
+    try {
+      const result = await setProjectFolderItemColorAction({ projectId: data.project.id, context: "research", kind: "folder", folderId: folder.id, colorLabel });
+      if ("error" in result) { showErrorToast(result.error); return; }
+      setFolderRecords((current) => current.map((item) => item.id === folder.id ? { ...item, colorLabel: result.colorLabel } : item));
+      showSuccessToast(result.colorLabel ? "Colour label updated." : "Colour label removed.");
+    } catch { showErrorToast("Unable to update this colour label. Please try again."); }
+    finally { setColorPendingIds((current) => { const next = new Set(current); next.delete(folder.id); return next; }); }
+  }
+
+  async function pinFolder(folder: FolderRecord) {
+    if (!data.sharedWorkspace.canWrite || pinPendingIds.has(folder.id)) return;
+    setPinPendingIds((current) => new Set(current).add(folder.id));
+    try {
+      const result = await setProjectFolderItemPinAction({ projectId: data.project.id, context: "research", kind: "folder", folderId: folder.id, pinned: !folder.pinnedAt });
+      if ("error" in result) { showErrorToast(result.error); return; }
+      setFolderRecords((current) => current.map((item) => item.id === folder.id ? { ...item, pinnedAt: result.pinnedAt } : item));
+      showSuccessToast(result.pinnedAt ? "Folder pinned to top." : "Folder unpinned.");
+    } catch { showErrorToast("Unable to update this pin. Please try again."); }
+    finally { setPinPendingIds((current) => { const next = new Set(current); next.delete(folder.id); return next; }); }
+  }
 
   async function uploadFilesToFolder(folder: FolderRecord, files: File[]) {
     if (!data.sharedWorkspace.canWrite || files.length === 0) return;
@@ -356,6 +346,7 @@ export function StageTwoWorkspace({
         return;
       }
       setDialogOpen(false);
+      setColorFilter("ALL");
       setFolderRecords((current) => [
         ...current,
         {
@@ -365,6 +356,9 @@ export function StageTwoWorkspace({
           systemKey: null,
           sortOrder: 1000,
           fileCount: 0,
+          folderCount: 0,
+          pinnedAt: null,
+          colorLabel: null,
         },
       ]);
       showSuccessToast("Folder created.");
@@ -430,6 +424,17 @@ export function StageTwoWorkspace({
       }}
     >
       <ProjectAccessRealtimeGuard projectId={data.project.id} currentUserId={currentUserId} />
+      {importOpen ? (
+        <StageTwoImportDialog
+          projectId={data.project.id}
+          folders={folderRecords}
+          onClose={() => setImportOpen(false)}
+          onImported={(folderId, importedFiles) => {
+            setFolderRecords((current) => current.map((folder) => folder.id === folderId ? { ...folder, fileCount: importedFiles.length } : folder));
+            router.refresh();
+          }}
+        />
+      ) : null}
       <Card
         className="mt-5 overflow-hidden rounded-[26px] border-[#dfe6df] shadow-[0_20px_54px_rgba(23,39,28,0.055)]"
       >
@@ -452,7 +457,13 @@ export function StageTwoWorkspace({
                   ) : null}
                 </div>
               </div>
-              <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end xl:w-auto xl:flex-nowrap">
+              <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end xl:w-auto">
+                <FolderColorFilterControl value={colorFilter} onChange={setColorFilter} />
+                {data.sharedWorkspace.canWrite ? (
+                  <Button type="button" variant="secondary" disabled={!folderRecords.length} onClick={() => setImportOpen(true)} className="rounded-[12px] shadow-none">
+                    <FileDown className="h-4 w-4" /> Import
+                  </Button>
+                ) : null}
                 <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
                   <div className="inline-flex shrink-0 rounded-[12px] border border-[#dce3dc] bg-white p-1">
                     {(["grid", "list"] as FolderView[]).map((option) => (
@@ -468,6 +479,7 @@ export function StageTwoWorkspace({
                 </div>
               </div>
             </div>
+            {folders.length === 0 && colorFilter !== "ALL" ? <div className="mt-5 rounded-[16px] border border-dashed border-[#d7e0d8] bg-white p-5 text-center text-[13px] text-[#758078]">No folders match this colour.<Button variant="ghost" className="ml-2" onClick={() => setColorFilter("ALL")}>Show all colours</Button></div> : null}
             <div className={cn("mt-5", view === "grid" ? "grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" : "space-y-3")}>
               {folders.map((folder) => (
                 <FolderTile
@@ -478,6 +490,10 @@ export function StageTwoWorkspace({
                   canWrite={data.sharedWorkspace.canWrite}
                   canDelete={data.sharedWorkspace.canDeleteFolders}
                   upload={folderUploads[folder.id]}
+                  onPin={(folder) => void pinFolder(folder)}
+                  pinPending={pinPendingIds.has(folder.id)}
+                  onColor={(folder, color) => void colorFolder(folder, color)}
+                  colorPending={colorPendingIds.has(folder.id)}
                   onDropFiles={(targetFolder, files) =>
                     void uploadFilesToFolder(targetFolder, files)
                   }
@@ -512,6 +528,7 @@ export function StageTwoWorkspace({
                   <span className="grid size-14 shrink-0 place-items-center rounded-[16px] bg-[#edf1fb] text-[#52688f]"><FolderKey className="h-8 w-8" /></span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-[15px] font-[740] text-[#202a23]">My Private Folder</span>
+                    <FolderColorBadge value={data.myPrivateFolder.colorLabel} className="mt-1" />
                     <span className="mt-2 inline-flex rounded-full bg-[#edf1fb] px-2.5 py-1 text-[10px] font-[720] text-[#52688f]">Owner only</span>
                   </span>
                   <ChevronRight className="h-4 w-4 shrink-0 text-[#71809e] transition group-hover:translate-x-0.5" />
@@ -525,7 +542,7 @@ export function StageTwoWorkspace({
                 >
                   <span className="grid size-14 shrink-0 place-items-center rounded-[16px] bg-[#e8ebe9] text-[#69736c]"><LockKeyhole className="h-8 w-8" /></span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[14px] font-[740] text-[#353d37]">{folder.ownerName}&apos;s Folder</span>
+                    <span className="block min-w-0 whitespace-normal break-words text-[14px] font-[740] text-[#353d37]">{folder.ownerName}&apos;s Folder</span>
                     <span className="mt-1 block truncate text-[10px] text-[#858e87]">{folder.role}</span>
                     <span className="mt-2 inline-flex rounded-full bg-[#e4e7e5] px-2.5 py-1 text-[10px] font-[800] uppercase tracking-[0.08em] text-[#59625c]">Classified</span>
                   </span>
@@ -542,13 +559,13 @@ export function StageTwoWorkspace({
           </div>
         </CardContent>
       </Card>
-      <NewFolderDialog open={dialogOpen} pending={isPending} error={folderError} onClose={() => setDialogOpen(false)} onCreate={createFolder} />
+      {dialogOpen ? <NewFolderDialog open pending={isPending} error={folderError} onClose={() => setDialogOpen(false)} onCreate={createFolder} /> : null}
       <ConfirmationDialog
         isOpen={Boolean(folderToDelete)}
         title="Delete folder?"
         description={
           folderToDelete
-            ? `Delete “${folderToDelete.name}” and every file inside it? This permanently removes them from the shared project workspace and cannot be undone.`
+            ? `Delete “${folderToDelete.name}” and all subfolders and files inside it? This permanently removes them from the shared project workspace and cannot be undone.`
             : ""
         }
         confirmLabel="Delete folder"

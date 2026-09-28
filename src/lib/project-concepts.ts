@@ -36,6 +36,8 @@ import { canOpenImplementedWorkflowStage } from "@/lib/workflow-stage-access";
 import { isAllowedStageSubmissionFile } from "@/lib/upload-validation";
 import { hasStageFiveDownstreamActivityForAttachment } from "@/lib/stage-five";
 import { deleteObjectIfNeeded } from "@/lib/storage/s3";
+import { isProjectStatusCompleted } from "@/lib/project-statuses";
+import { getStageSkipRevocationEligibility, getTaskCompletionRevocationEligibility, type TaskCompletionRevocationEligibility } from "@/lib/project-stage-skip-revocation";
 
 export type ProjectConceptAttachmentReference = {
   id: string;
@@ -102,6 +104,10 @@ export type ProjectConceptFolderRecord = {
     email: string;
   } | null;
   approvedAt: Date | null;
+  completedWithoutFileAt: Date | null;
+  canCompleteWithoutFile: boolean;
+  completionRequest: ConceptCompletionRequest | null;
+  canRequestCompletion: boolean;
   sourceStage3Concept: { id: string; name: string } | null;
   startingReference: ProjectConceptAttachmentReference | null;
   briefAttachments: Array<{
@@ -111,6 +117,8 @@ export type ProjectConceptFolderRecord = {
     fileSize: number;
   }>;
 };
+
+export type ConceptCompletionRequest = { requestedAt: string; note: string | null };
 
 export type ProjectConceptChatMode = {
   type: "concept";
@@ -131,6 +139,11 @@ export type ProjectConceptChatMode = {
   isAssignedExecutor: boolean;
   participantUserIds: string[];
   approvedAttachmentId: string | null;
+  completedWithoutFile: boolean;
+  completionRevocationEligibility: TaskCompletionRevocationEligibility | null;
+  canCompleteWithoutFile: boolean;
+  completionRequest: ConceptCompletionRequest | null;
+  canRequestCompletion: boolean;
   approvalRevocationEligibility: ConceptApprovalRevocationEligibility;
   isWorkflowCompleted: boolean;
   startingReference: ProjectConceptStartingReference | null;
@@ -224,6 +237,62 @@ function getTaskerStageOrder(stageKey: ConceptWorkflowStageKey, sortOrder: numbe
   return stageBase + sortOrder;
 }
 
+const formalConceptAttachmentTypes: AttachmentAssetType[] = [
+  AttachmentAssetType.REVISION_ORIGINAL,
+  AttachmentAssetType.STAGE_SUBMISSION,
+];
+
+const conceptCompletionStageSelect = {
+  status: true,
+  actualStartedAt: true,
+  _count: { select: { attachments: { where: {
+    assetType: { in: formalConceptAttachmentTypes },
+    status: { in: [AttachmentStatus.READY, AttachmentStatus.UPLOADING] },
+  } } } },
+} satisfies Prisma.ProjectStageSelect;
+
+function isConceptCompletedWithoutFile(folder: {
+  completedWithoutFileAt: Date | null;
+  taskerStage: { status: StageStatus };
+}) {
+  return Boolean(folder.completedWithoutFileAt && folder.taskerStage.status === StageStatus.COMPLETED);
+}
+
+type FilelessConceptTask = {
+  id: string; taskerStageId: string; assignedExecutorId: string | null;
+  approvedAttachmentId?: string | null;
+  approvedAttachment?: { id: string } | null;
+  completedWithoutFileAt: Date | null;
+  taskerStage: { status: StageStatus; actualStartedAt: Date | null; _count: { attachments: number } };
+};
+
+function isOpenConceptWithoutSubmission(project: ConceptProject, folder: FilelessConceptTask, stageKey: ConceptWorkflowStageKey) {
+  return isSupportedConceptStageKey(stageKey) &&
+    getWorkflowStageStatus(project, stageKey) === ProjectWorkflowStageStatus.AVAILABLE &&
+    !project.completedAt && !project.archivedAt && !isProjectStatusCompleted(project.status) &&
+    !folder.approvedAttachmentId && !folder.approvedAttachment && !folder.completedWithoutFileAt &&
+    folder.taskerStage.status !== StageStatus.COMPLETED && folder.taskerStage._count.attachments === 0;
+}
+
+function canCompleteConceptWithoutFile(user: PermissionUser, project: ConceptProject, folder: FilelessConceptTask, stageKey: ConceptWorkflowStageKey) {
+  return canCompleteProjectConceptStage(user, getConceptAccessContext(project, folder, stageKey)) &&
+    isOpenConceptWithoutSubmission(project, folder, stageKey);
+}
+
+function canRequestConceptCompletion(user: PermissionUser, project: ConceptProject, folder: FilelessConceptTask & { completionRequestedAt: Date | null }, stageKey: ConceptWorkflowStageKey) {
+  return folder.assignedExecutorId === user.id && Boolean(folder.taskerStage.actualStartedAt) &&
+    !folder.completionRequestedAt && isOpenConceptWithoutSubmission(project, folder, stageKey);
+}
+
+function mapCompletionRequest(folder: {
+  completionRequestedAt: Date | null; completionRequestNote: string | null;
+  taskerStage: { status: StageStatus };
+}): ConceptCompletionRequest | null {
+  return folder.completionRequestedAt && folder.taskerStage.status !== StageStatus.COMPLETED
+    ? { requestedAt: folder.completionRequestedAt.toISOString(), note: folder.completionRequestNote }
+    : null;
+}
+
 const conceptFolderSelect = {
   id: true,
   name: true,
@@ -232,6 +301,9 @@ const conceptFolderSelect = {
   taskerStageId: true,
   assignedExecutorId: true,
   approvedAt: true,
+  completedWithoutFileAt: true,
+  completionRequestedAt: true,
+  completionRequestNote: true,
   approvedBy: {
     select: { id: true, name: true, email: true },
   },
@@ -266,6 +338,7 @@ const conceptFolderSelect = {
   },
   taskerStage: {
     select: {
+      ...conceptCompletionStageSelect,
       description: true,
       actualStartedAt: true,
       plannedDueAt: true,
@@ -330,6 +403,8 @@ function mapConceptFolder(
     select: typeof conceptFolderSelect;
   }>,
   currentUserId: string,
+  canCompleteWithoutFile = false,
+  canRequestCompletion = false,
 ): ProjectConceptFolderRecord {
   return {
     id: folder.id,
@@ -349,6 +424,10 @@ function mapConceptFolder(
       : null,
     approvedBy: folder.approvedBy,
     approvedAt: folder.approvedAt,
+    completedWithoutFileAt: isConceptCompletedWithoutFile(folder) ? folder.completedWithoutFileAt : null,
+    canCompleteWithoutFile,
+    completionRequest: mapCompletionRequest(folder),
+    canRequestCompletion,
     sourceStage3Concept: folder.sourceStage3Concept,
     startingReference: folder.sourceStage3ApprovedAttachment
       ? mapConceptAttachmentReference(folder.sourceStage3ApprovedAttachment)
@@ -383,7 +462,8 @@ export async function getProjectConceptFolders(
     coOwnerIds: project.coOwners.map((coOwner) => coOwner.userId),
   };
   const canManage = canManageProjectConcept(user, managerContext);
-  const canCompleteStage = canCompleteProjectConceptStage(user, managerContext);
+  const canCompleteStage = canCompleteProjectConceptStage(user, managerContext) &&
+    !project.completedAt && !project.archivedAt && !isProjectStatusCompleted(project.status);
   const isProjectExecutor = project.executors.some(
     (executor) => executor.userId === user.id,
   );
@@ -420,15 +500,20 @@ export async function getProjectConceptFolders(
   }
 
   return {
-    folders: displayedFolders.map((folder) => mapConceptFolder(folder, user.id)),
+    folders: displayedFolders.map((folder) => mapConceptFolder(folder, user.id,
+      canCompleteConceptWithoutFile(user, project, folder, stageKey),
+      canRequestConceptCompletion(user, project, folder, stageKey))),
     canManage,
     canCompleteStage,
+    skipRevocation: await getStageSkipRevocationEligibility(user, { projectId, stageKey }),
     workflowStatus: getWorkflowStageStatus(project, stageKey) ?? null,
     completionConcepts: canCompleteStage
       ? visibleFolders.map((folder) => ({
           id: folder.id,
           name: folder.name,
           isApproved: Boolean(folder.approvedAttachment),
+          completedWithoutFile: isConceptCompletedWithoutFile(folder),
+          canCompleteWithoutFile: canCompleteConceptWithoutFile(user, project, folder, stageKey),
         }))
       : [],
     selectedExecutorId: requestedExecutorId,
@@ -530,6 +615,21 @@ export async function createProjectConceptFolder(
     const folder = await withPrismaRetry(() =>
       prisma.$transaction(
         async (tx) => {
+          // A skip can be undone while a task dialog is open. Recheck inside the
+          // same serializable transaction that creates the task.
+          const currentProject = await tx.project.findUnique({
+            where: { id: input.projectId }, select: projectStageAccessSelect,
+          });
+          if (!currentProject || currentProject.completedAt || currentProject.archivedAt ||
+              isProjectStatusCompleted(currentProject.status) ||
+              getWorkflowStageStatus(currentProject, input.stageKey) !== ProjectWorkflowStageStatus.AVAILABLE ||
+              !currentProject.executors.some((executor) => executor.userId === assignedExecutorId) ||
+              !canManageProjectConcept(user, {
+                ...managerContext, ownerId: currentProject.ownerId,
+                coOwnerIds: currentProject.coOwners.map((entry) => entry.userId),
+              })) {
+            throw new Error("CONCEPT_STAGE_CHANGED");
+          }
           const duplicate = await tx.projectConceptFolder.findUnique({
             where: {
               projectId_workflowStageKey_normalizedName: {
@@ -626,12 +726,16 @@ export async function createProjectConceptFolder(
             select: conceptFolderSelect,
           });
         },
-        { maxWait: 5_000, timeout: 15_000 },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 15_000 },
       ),
     );
 
-    return { folder: mapConceptFolder(folder, user.id) } as const;
+    return { folder: mapConceptFolder(folder, user.id, canCompleteConceptWithoutFile(user, project, folder, input.stageKey)) } as const;
   } catch (error) {
+    if ((error instanceof Error && error.message === "CONCEPT_STAGE_CHANGED") ||
+        (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034")) {
+      return { error: "The stage or its executor assignment changed. Refresh before creating this task." } as const;
+    }
     if (
       error instanceof Error &&
       error.message === "INVALID_CONCEPT_BRIEF_ATTACHMENTS"
@@ -1050,6 +1154,7 @@ export async function editProjectConceptFolder(
         taskerStage: {
           select: {
             actualStartedAt: true,
+            status: true,
             description: true,
             plannedDueAt: true,
           },
@@ -1112,7 +1217,7 @@ export async function editProjectConceptFolder(
     return { error: "Assigned Executor must be a current project executor." } as const;
   }
 
-  if (folder.taskerStage.actualStartedAt && (briefChanged || (assignmentChanged && folder.assignedExecutorId))) {
+  if ((folder.taskerStage.actualStartedAt || folder.taskerStage.status === StageStatus.COMPLETED) && (briefChanged || (assignmentChanged && folder.assignedExecutorId))) {
     return {
       error: "Assigned Executor and Concept Brief are locked after work starts.",
     } as const;
@@ -1162,11 +1267,6 @@ export async function editProjectConceptFolder(
     throw error;
   }
 }
-
-const formalConceptAttachmentTypes: AttachmentAssetType[] = [
-  AttachmentAssetType.REVISION_ORIGINAL,
-  AttachmentAssetType.STAGE_SUBMISSION,
-];
 
 type FormalConceptAttachment = {
   id: string;
@@ -1426,6 +1526,9 @@ export async function markProjectConceptApprovedAttachment(
               where: { id: folder.id },
               data: {
                 approvedAttachmentId: attachment.id,
+                completedWithoutFileAt: null,
+                completionRequestedAt: null,
+                completionRequestNote: null,
                 approvedById: user.id,
                 approvedAt,
               },
@@ -1451,6 +1554,7 @@ export async function markProjectConceptApprovedAttachment(
               projectId: input.projectId,
               workflowStageKey: ProjectWorkflowStageKey.CONCEPT_CREATION,
               approvedAttachmentId: null,
+              NOT: { completedWithoutFileAt: { not: null }, taskerStage: { status: StageStatus.COMPLETED } },
             },
           });
 
@@ -1629,6 +1733,7 @@ export async function markStageFourFinalApprovedAttachment(
               where: { id: folder.id },
               data: {
                 approvedAttachmentId: attachment.id,
+                completedWithoutFileAt: null, completionRequestedAt: null, completionRequestNote: null,
                 approvedById: user.id,
                 approvedAt,
               },
@@ -1648,6 +1753,7 @@ export async function markStageFourFinalApprovedAttachment(
               projectId: input.projectId,
               workflowStageKey: ProjectWorkflowStageKey.PROJECT_DEVELOPMENT,
               approvedAttachmentId: null,
+              NOT: { completedWithoutFileAt: { not: null }, taskerStage: { status: StageStatus.COMPLETED } },
             },
           });
 
@@ -2319,6 +2425,121 @@ export async function revokeStageFourFinalApprovedAttachment(
   );
 }
 
+export async function requestStageThreeTaskCompletion(
+  user: PermissionUser,
+  input: { projectId: string; folderId: string; note?: string },
+) {
+  return requestProjectConceptTaskCompletion(user, { ...input, stageKey: ProjectWorkflowStageKey.CONCEPT_CREATION });
+}
+
+export async function completeStageThreeTaskWithoutFile(
+  user: PermissionUser,
+  input: { projectId: string; folderId: string },
+) {
+  return completeProjectConceptTaskWithoutFile(user, { ...input, stageKey: ProjectWorkflowStageKey.CONCEPT_CREATION });
+}
+
+export async function requestProjectConceptTaskCompletion(
+  user: PermissionUser,
+  input: { projectId: string; folderId: string; stageKey: ConceptWorkflowStageKey; note?: string },
+  conflictRetryCount = 0,
+): Promise<{ changed: boolean; taskerStageId: string } | { error: string }> {
+  if (!isSupportedConceptStageKey(input.stageKey)) return { error: "Task completion is available only in Stages 3 and 4." };
+  if (input.note !== undefined && typeof input.note !== "string") return { error: "Enter a text note." };
+  const note = input.note?.trim() || null;
+  if (note && note.length > 2_000) return { error: "The completion note must be 2,000 characters or fewer." };
+  try {
+    return await withPrismaRetry(() => prisma.$transaction(async (tx) => {
+      const folder = await tx.projectConceptFolder.findFirst({
+        where: {
+          id: input.folderId, projectId: input.projectId,
+          workflowStageKey: input.stageKey,
+          taskerStage: { projectId: input.projectId, isTasker: true },
+        },
+        select: { ...conceptFolderSelect, project: { select: projectStageAccessSelect } },
+      });
+      if (!folder || folder.assignedExecutorId !== user.id) {
+        return { error: "Only the assigned executor can request completion of this task." };
+      }
+      if (!isOpenConceptWithoutSubmission(folder.project, folder, input.stageKey)) {
+        return { error: folder.taskerStage._count.attachments > 0 || folder.approvedAttachment
+          ? "This task already has a file submission or upload in progress. Use the file review process."
+          : "Completion cannot be requested because the task, stage, or project is closed." };
+      }
+      if (!folder.taskerStage.actualStartedAt) return { error: "Accept the task brief before requesting completion." };
+      if (folder.completionRequestedAt) return { changed: false, taskerStageId: folder.taskerStageId };
+      await tx.projectConceptFolder.update({ where: { id: folder.id }, data: {
+        completionRequestedAt: new Date(), completionRequestNote: note,
+      } });
+      // Store the note as text; escaping prevents user text being treated as chat HTML.
+      const escapedNote = note?.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll("\n", "<br>");
+      await tx.projectComment.create({ data: {
+        projectId: input.projectId, stageId: folder.taskerStageId, authorId: user.id,
+        body: `<p>Task completion requested without a file submission.</p>${escapedNote ? `<p>${escapedNote}</p>` : ""}`,
+      } });
+      return { changed: true, taskerStageId: folder.taskerStageId };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 15_000 }));
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+      if (conflictRetryCount < 2) return requestProjectConceptTaskCompletion(user, input, conflictRetryCount + 1);
+      return { error: "The task changed at the same time. Please try again." };
+    }
+    throw error;
+  }
+}
+
+export async function completeProjectConceptTaskWithoutFile(
+  user: PermissionUser,
+  input: { projectId: string; folderId: string; stageKey: ConceptWorkflowStageKey },
+  conflictRetryCount = 0,
+): Promise<{ changed: boolean; taskerStageId: string } | { error: string }> {
+  if (!isSupportedConceptStageKey(input.stageKey)) return { error: "Task completion is available only in Stages 3 and 4." };
+  try {
+    return await withPrismaRetry(() => prisma.$transaction(async (tx) => {
+      const folder = await tx.projectConceptFolder.findFirst({
+        where: {
+          id: input.folderId, projectId: input.projectId,
+          workflowStageKey: input.stageKey,
+          taskerStage: { projectId: input.projectId, isTasker: true },
+        },
+        select: { ...conceptFolderSelect, project: { select: projectStageAccessSelect } },
+      });
+      if (!folder) return { error: "Task not found." };
+      const context = getConceptAccessContext(folder.project, folder, input.stageKey);
+      if (!canCompleteProjectConceptStage(user, context)) {
+        return { error: "Only the project owner or an administrator can complete a task without a file." };
+      }
+      if (isConceptCompletedWithoutFile(folder)) return { changed: false, taskerStageId: folder.taskerStageId };
+      if (!canCompleteConceptWithoutFile(user, folder.project, folder, input.stageKey)) {
+        return { error: folder.taskerStage._count.attachments > 0 || folder.approvedAttachment
+          ? "This task has a submitted file or an upload in progress. Review the submission to complete it."
+          : "This task cannot be completed because the task, stage, or project is closed." };
+      }
+      const completedAt = new Date();
+      await tx.projectStage.update({
+        where: { id: folder.taskerStageId },
+        data: { status: StageStatus.COMPLETED, completedAt },
+      });
+      await tx.projectConceptFolder.update({
+        where: { id: folder.id }, data: {
+          completedWithoutFileAt: completedAt, completionRequestedAt: null, completionRequestNote: null,
+        },
+      });
+      await tx.projectComment.create({ data: {
+        projectId: input.projectId, stageId: folder.taskerStageId, authorId: user.id,
+        body: "Task completed without a file submission.",
+      } });
+      return { changed: true, taskerStageId: folder.taskerStageId };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 15_000 }));
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+      if (conflictRetryCount < 2) return completeProjectConceptTaskWithoutFile(user, input, conflictRetryCount + 1);
+      return { error: "The task changed at the same time. Please try again." };
+    }
+    throw error;
+  }
+}
+
 type StageThreeCompletionResult = {
   transitioned: boolean;
   createdFolderIds: string[];
@@ -2326,11 +2547,12 @@ type StageThreeCompletionResult = {
   approvedCount: number;
   skipped: boolean;
   unapprovedConcepts: Array<{ id: string; name: string }>;
+  completedTaskIds: string[];
 };
 
 export async function completeStageThreeConcepts(
   user: PermissionUser,
-  input: { projectId: string },
+  input: { projectId: string; completeOpenTasks?: boolean },
   conflictRetryCount = 0,
 ) {
   try {
@@ -2340,19 +2562,8 @@ export async function completeStageThreeConcepts(
           const project = await tx.project.findUnique({
             where: { id: input.projectId },
             select: {
-              id: true,
+              ...projectStageAccessSelect,
               category: true,
-              ownerId: true,
-              coOwners: { select: { userId: true } },
-              workflowStages: {
-                select: {
-                  id: true,
-                  stageKey: true,
-                  status: true,
-                  unlockedAt: true,
-                  completedAt: true,
-                },
-              },
               conceptFolders: {
                 where: {
                   workflowStageKey: ProjectWorkflowStageKey.CONCEPT_CREATION,
@@ -2369,6 +2580,8 @@ export async function completeStageThreeConcepts(
                   taskerStageId: true,
                   assignedExecutorId: true,
                   approvedAttachmentId: true,
+                  completedWithoutFileAt: true,
+                  taskerStage: { select: conceptCompletionStageSelect },
                   approvedAttachment: {
                     select: formalConceptAttachmentSelect,
                   },
@@ -2394,8 +2607,12 @@ export async function completeStageThreeConcepts(
           if (!canCompleteProjectConceptStage(user, managerContext)) {
             return {
               error:
-                "Only a project owner, co-owner, or administrator can complete Stage 3.",
+                "Only the project owner or an administrator can complete Stage 3.",
             };
+          }
+
+          if (project.completedAt || project.archivedAt || isProjectStatusCompleted(project.status)) {
+            return { error: "Stage 3 cannot be completed because the project is closed." };
           }
 
           const stageThreeWorkflow = project.workflowStages.find(
@@ -2425,14 +2642,25 @@ export async function completeStageThreeConcepts(
           const approvedConcepts = project.conceptFolders.filter(
             (folder) => Boolean(folder.approvedAttachmentId),
           );
-          const unapprovedConcepts = project.conceptFolders
-            .filter((folder) => !folder.approvedAttachmentId)
-            .map((folder) => ({ id: folder.id, name: folder.name }));
+          const pendingConcepts = project.conceptFolders.filter(
+            (folder) => !folder.approvedAttachmentId && !isConceptCompletedWithoutFile(folder),
+          );
+          const manuallyCompleteTasks = input.completeOpenTasks === true && completionMode === "TRANSITION";
+          const unapprovedConcepts = pendingConcepts.map((folder) => ({ id: folder.id, name: folder.name }));
 
-          if (unapprovedConcepts.length > 0) {
+          if (unapprovedConcepts.length > 0 && !manuallyCompleteTasks) {
             return {
-              error: `Every Stage 3 concept must have an Approved Concept before Stage 3 can be completed. Pending: ${unapprovedConcepts.map((concept) => concept.name).join(", ")}.`,
+              error: `Every Stage 3 task must have an approved file or be completed without a file before Stage 3 can be completed. Pending: ${unapprovedConcepts.map((concept) => concept.name).join(", ")}.`,
             };
+          }
+
+          if (manuallyCompleteTasks) {
+            const blockedTasks = pendingConcepts.filter((folder) =>
+              !canCompleteConceptWithoutFile(user, project, folder, ProjectWorkflowStageKey.CONCEPT_CREATION),
+            );
+            if (blockedTasks.length > 0) {
+              return { error: `These tasks have a submitted file, an upload in progress, or are already closed. Review them before completing Stage 3: ${blockedTasks.map((folder) => folder.name).join(", ")}.` };
+            }
           }
 
           for (const concept of approvedConcepts) {
@@ -2455,6 +2683,20 @@ export async function completeStageThreeConcepts(
           const completedAt = new Date();
 
           if (transitioned) {
+            if (manuallyCompleteTasks && pendingConcepts.length > 0) {
+              await tx.projectStage.updateMany({
+                where: { id: { in: pendingConcepts.map((folder) => folder.taskerStageId) }, projectId: project.id },
+                data: { status: StageStatus.COMPLETED, completedAt },
+              });
+              await tx.projectConceptFolder.updateMany({
+                where: { id: { in: pendingConcepts.map((folder) => folder.id) }, projectId: project.id },
+                data: { completedWithoutFileAt: completedAt, completionRequestedAt: null, completionRequestNote: null },
+              });
+              await tx.projectComment.createMany({ data: pendingConcepts.map((folder) => ({
+                projectId: project.id, stageId: folder.taskerStageId, authorId: user.id,
+                body: "Task completed without a file submission during manual Stage 3 completion.",
+              })) });
+            }
             const completed = await tx.projectWorkflowStage.updateMany({
               where: {
                 id: stageThreeWorkflow.id,
@@ -2486,7 +2728,8 @@ export async function completeStageThreeConcepts(
             promotedFolderIds: [],
             approvedCount: approvedConcepts.length,
             skipped: project.conceptFolders.length === 0,
-            unapprovedConcepts,
+            unapprovedConcepts: [],
+            completedTaskIds: manuallyCompleteTasks ? pendingConcepts.map((folder) => folder.id) : [],
           };
         },
         {
@@ -2545,6 +2788,7 @@ export async function completeStageFourConcepts(
             where: { id: input.projectId },
             select: {
               id: true,
+              completedAt: true, archivedAt: true, status: projectStageAccessSelect.status,
               category: true,
               ownerId: true,
               coOwners: { select: { userId: true } },
@@ -2583,6 +2827,8 @@ export async function completeStageFourConcepts(
                   workflowStageKey: true,
                   taskerStageId: true,
                   approvedAttachmentId: true,
+                  completedWithoutFileAt: true,
+                  taskerStage: { select: { status: true } },
                   approvedAttachment: {
                     select: formalConceptAttachmentSelect,
                   },
@@ -2608,8 +2854,12 @@ export async function completeStageFourConcepts(
           if (!canCompleteProjectConceptStage(user, managerContext)) {
             return {
               error:
-                "Only a project owner, co-owner, or administrator can complete Stage 4.",
+                "Only the project owner or an administrator can complete Stage 4.",
             };
+          }
+
+          if (project.completedAt || project.archivedAt || isProjectStatusCompleted(project.status)) {
+            return { error: "Stage 4 cannot be completed because the project is closed." };
           }
 
           const stageFourWorkflow = project.workflowStages.find(
@@ -2685,12 +2935,12 @@ export async function completeStageFourConcepts(
               (folder) => Boolean(folder.approvedAttachmentId),
             );
             const stageThreeConceptsWithoutApprovedFile = stageThreeConcepts
-              .filter((folder) => !folder.approvedAttachmentId)
+              .filter((folder) => !folder.approvedAttachmentId && !isConceptCompletedWithoutFile(folder))
               .map((folder) => folder.name);
 
             if (stageThreeConceptsWithoutApprovedFile.length > 0) {
               return {
-                error: `Every completed Stage 3 concept must have an Approved Concept before Stage 4 can be skipped. Missing: ${stageThreeConceptsWithoutApprovedFile.join(", ")}.`,
+                error: `Every Stage 3 task must have an approved file or be completed without a file before Stage 4 can be skipped. Missing: ${stageThreeConceptsWithoutApprovedFile.join(", ")}.`,
               };
             }
 
@@ -2826,19 +3076,12 @@ export async function completeStageFourConcepts(
             (folder) => Boolean(folder.approvedAttachmentId),
           );
           const conceptsWithoutFinalFile = stageFourConcepts
-            .filter((folder) => !folder.approvedAttachmentId)
+            .filter((folder) => !folder.approvedAttachmentId && !isConceptCompletedWithoutFile(folder))
             .map((folder) => ({ id: folder.id, name: folder.name }));
-
-          if (finalConcepts.length === 0) {
-            return {
-              error:
-                "At least one concept must have a Final Approved File before Stage 4 can be completed.",
-            };
-          }
 
           if (conceptsWithoutFinalFile.length > 0) {
             return {
-              error: `Every Stage 4 concept must receive Final Approval before Stage 4 can be completed. Pending: ${conceptsWithoutFinalFile.map((concept) => concept.name).join(", ")}.`,
+              error: `Every Stage 4 task must have a Final Approved File or be marked as complete before Stage 4 can be completed. Pending: ${conceptsWithoutFinalFile.map((concept) => concept.name).join(", ")}.`,
             };
           }
 
@@ -3074,6 +3317,10 @@ export async function getProjectConceptChatContext(
         taskerStageId: true,
         assignedExecutorId: true,
         approvedAttachmentId: true,
+        completedWithoutFileAt: true,
+        completionRequestedAt: true,
+        completionRequestNote: true,
+        taskerStage: { select: conceptCompletionStageSelect },
         sourceStage3Concept: {
           select: { id: true, name: true },
         },
@@ -3227,6 +3474,12 @@ export async function getProjectConceptChatContext(
       isAssignedExecutor: record.assignedExecutorId === user.id,
       participantUserIds: getProjectConceptParticipantUserIds(accessContext),
       approvedAttachmentId: record.approvedAttachmentId,
+      completedWithoutFile: isConceptCompletedWithoutFile(record),
+      completionRevocationEligibility: isConceptCompletedWithoutFile(record)
+        ? await getTaskCompletionRevocationEligibility(user, input) : null,
+      canCompleteWithoutFile: canCompleteConceptWithoutFile(user, record.project, record, input.stageKey),
+      completionRequest: mapCompletionRequest(record),
+      canRequestCompletion: canRequestConceptCompletion(user, record.project, record, input.stageKey),
       approvalRevocationEligibility,
       isWorkflowCompleted:
         workflowStatus === ProjectWorkflowStageStatus.COMPLETED,

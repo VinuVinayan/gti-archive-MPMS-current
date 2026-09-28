@@ -299,7 +299,7 @@ export function CollaborationWorkspace({
                           {getInitials(collaborator.name)}
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate text-[15px] font-[600] text-[#1f2923]">
+                          <p className="min-w-0 whitespace-normal break-words text-[15px] font-[600] text-[#1f2923]">
                             {collaborator.name}
                           </p>
                           <p className="truncate text-[11px] text-[#8b948d] lg:hidden">

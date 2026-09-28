@@ -14,6 +14,16 @@ enum UserRole {
   USER
 }
 
+enum ProjectItemColor {
+  RED
+  ORANGE
+  YELLOW
+  GREEN
+  BLUE
+  PURPLE
+  GREY
+}
+
 enum StageStatus {
   PENDING
   ONGOING
@@ -97,6 +107,11 @@ enum ProjectInquiryPartyRole {
 enum ProjectInquiryPartySource {
   USER
   MANUAL_CONTACT
+}
+
+enum ProjectContactEntityType {
+  PERSON
+  COMPANY
 }
 
 enum ProjectInquiryTargetMarketKind {
@@ -323,6 +338,7 @@ enum ActivityLogAction {
   COMMENT_ATTACHMENT_UPLOADED
   REVISION_CREATED
   STAGE_SKIPPED
+  STAGE_SKIP_REVOKED
   ARCHIVE_SNAPSHOT_SAVED
   FINAL_ARCHIVED
 }
@@ -921,8 +937,12 @@ model ProjectWorkflowStage {
 
 model ContactDirectoryEntry {
   id             String                @id @default(cuid())
+  entityType     ProjectContactEntityType @default(PERSON)
   name           String
   company        String?
+  companyEmail   String?
+  companyPhone   String?
+  companyWebsite String?
   position       String?
   email          String?
   phone          String?
@@ -969,7 +989,11 @@ model ProjectInquiryParty {
   contactId        String?
   contact          ContactDirectoryEntry?    @relation(fields: [contactId], references: [id], onDelete: Restrict)
   snapshotName     String
+  snapshotEntityType ProjectContactEntityType @default(PERSON)
   snapshotCompany  String?
+  snapshotCompanyEmail String?
+  snapshotCompanyPhone String?
+  snapshotCompanyWebsite String?
   snapshotPosition String?
   snapshotEmail    String?
   snapshotPhone    String?
@@ -1040,6 +1064,11 @@ model ProjectResearchFolder {
   workspace      ProjectResearchWorkspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   name           String
   normalizedName String
+  parentFolderId String?
+  parentFolder   ProjectResearchFolder? @relation("ResearchFolderChildren", fields: [workspaceId, parentFolderId], references: [workspaceId, id], onDelete: NoAction, onUpdate: NoAction)
+  children       ProjectResearchFolder[] @relation("ResearchFolderChildren")
+  pinnedAt       DateTime?
+  colorLabel     ProjectItemColor?
   systemKey      ProjectResearchFolderSystemKey?
   isSystem       Boolean                         @default(false)
   sortOrder      Int                             @default(1000)
@@ -1049,7 +1078,8 @@ model ProjectResearchFolder {
   createdAt      DateTime                        @default(now())
   updatedAt      DateTime                        @updatedAt
 
-  @@unique([workspaceId, normalizedName])
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, parentFolderId, normalizedName])
   @@unique([workspaceId, systemKey])
   @@index([workspaceId, sortOrder])
   @@index([createdById])
@@ -1060,12 +1090,16 @@ model ProjectResearchFolderFile {
   folderId     String
   folder       ProjectResearchFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
   attachmentId String                @unique
+  inquiryImportKey String?
+  pinnedAt     DateTime?
+  colorLabel   ProjectItemColor?
   attachment   ProjectAttachment     @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
   addedById    String
   addedBy      User                  @relation("ProjectResearchFolderFileAdder", fields: [addedById], references: [id], onDelete: Restrict)
   createdAt    DateTime              @default(now())
 
   @@unique([folderId, attachmentId])
+  @@unique([folderId, inquiryImportKey])
   @@index([folderId, createdAt])
   @@index([addedById])
 }
@@ -1076,11 +1110,19 @@ model ProjectPrivateFolder {
   project     Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   ownerUserId String
   owner       User                @relation("ProjectPrivateFolderOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  name        String              @default("My Private Folder")
+  normalizedName String           @default("my private folder")
+  parentFolderId String?
+  parentFolder ProjectPrivateFolder? @relation("PrivateFolderChildren", fields: [projectId, ownerUserId, parentFolderId], references: [projectId, ownerUserId, id], onDelete: NoAction, onUpdate: NoAction)
+  children    ProjectPrivateFolder[] @relation("PrivateFolderChildren")
+  pinnedAt    DateTime?
+  colorLabel  ProjectItemColor?
   files       ProjectAttachment[]
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
 
-  @@unique([projectId, ownerUserId])
+  @@unique([projectId, ownerUserId, id])
+  @@unique([parentFolderId, normalizedName])
   @@index([ownerUserId])
 }
 
@@ -1098,6 +1140,9 @@ model ProjectConceptFolder {
   approvedById                     String?
   approvedBy                       User?                   @relation("ProjectConceptFolderApprover", fields: [approvedById], references: [id], onDelete: SetNull)
   approvedAt                       DateTime?
+  completedWithoutFileAt           DateTime?
+  completionRequestedAt            DateTime?
+  completionRequestNote            String?                 @db.Text
   sourceStage3ConceptId            String?                 @unique
   sourceStage3Concept              ProjectConceptFolder?   @relation("ProjectConceptPromotion", fields: [sourceStage3ConceptId], references: [id], onDelete: Restrict)
   promotedStage4Concept            ProjectConceptFolder?   @relation("ProjectConceptPromotion")
@@ -1545,6 +1590,7 @@ model ProductionApprovalStep {
   decidedByUserId             String?
   decidedByUser               User?                            @relation("ProductionApprovalDecider", fields: [decidedByUserId], references: [id], onDelete: SetNull)
   decisionComment             String?                          @db.Text
+  rejectionHistory            Json                             @default("[]")
   decidedAt                   DateTime?
   removedAt                   DateTime?
   removedByUserId             String?
@@ -2000,6 +2046,8 @@ model ProjectAttachment {
   inquiryAssociations        ProjectInquiryAttachment[]
   researchFolderFile         ProjectResearchFolderFile?
   privateFolderId            String?
+  pinnedAt                   DateTime?
+  colorLabel                 ProjectItemColor?
   privateFolder              ProjectPrivateFolder?                 @relation(fields: [privateFolderId], references: [id], onDelete: SetNull)
   stageFileHandoffs          ProjectStageFileHandoff[]             @relation("ProjectStageFileHandoffSourceAttachment")
   sourceFileChecklists       ProjectFileChecklist[]                @relation("ProjectFileChecklistSourceAttachment")

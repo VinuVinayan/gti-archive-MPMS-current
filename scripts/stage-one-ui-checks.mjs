@@ -29,7 +29,7 @@ assert.equal(
   "Both Add manually actions must expose matching hover and keyboard-focus treatment.",
 );
 assert(
-  workspace.indexOf("validateProjectContactInput(contactForm)") <
+  workspace.indexOf("const validation = validateProjectContactInput(") <
     workspace.indexOf("createContactDirectoryEntryAction(project.id, validation.data)"),
   "Client validation must run before the Stage 1 contact server action.",
 );
@@ -112,14 +112,15 @@ assert(
 
 assert(
   workspace.includes("ProjectFlowSummaryStrip") &&
-    summary.includes("people.slice(0, 1)") &&
+    summary.includes("people.slice(0, visibleCount)") &&
+    /people=\{executors\}[\s\S]*?visibleCount=\{3\}/.test(summary) &&
     summary.includes("+{remainingCount}") &&
     summary.includes("DropdownMenuTrigger asChild"),
-  "Stage 1 must reuse the shared participant +N overflow summary.",
+  "Stage 1 must reuse the shared participant summary with three visible executor names and +N overflow.",
 );
 
 for (const field of [
-  "Client Name",
+  "Client",
   "External / Internal - for execution",
   "Final Beneficiaries",
   "Target Market",
@@ -135,10 +136,10 @@ for (const field of [
 }
 
 assert(
-  workspace.includes('<StageOneFormField label="Client Name" required') &&
+  workspace.includes('<StageOneFormField label="Client" required') &&
     workspace.includes('label="Final Beneficiaries"') &&
     workspace.includes("multiple"),
-  "Client Name and the multi-select Final Beneficiaries field must be required.",
+  "Client and the multi-select Final Beneficiaries field must be required.",
 );
 assert.equal(
   workspace
@@ -201,7 +202,7 @@ assert(
 
 for (const label of [
   "Client Information",
-  "Client Name",
+  "Client",
   "Client Type",
   "Final Beneficiary",
   "Target Market",

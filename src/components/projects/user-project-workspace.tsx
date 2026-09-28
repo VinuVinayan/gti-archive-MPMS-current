@@ -10,6 +10,7 @@ import {
   LockKeyhole,
   ShieldCheck,
   UserRound,
+  Upload,
 } from "lucide-react";
 
 import { ProjectAccessRealtimeGuard } from "@/components/projects/project-access-realtime-guard";
@@ -156,7 +157,7 @@ export function UserProjectWorkspace({
         <SectionHeading
           icon={<Folder className="h-5 w-5" />}
           title="Shared Folders"
-          description="Canonical project references maintained by the project owner."
+          description="Share project files with your team in Brief and Tech."
         />
         <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:max-w-[920px]">
           {data.sharedFolders.map((folder) => {
@@ -168,7 +169,7 @@ export function UserProjectWorkspace({
                     {folder.name}
                   </span>
                   <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-[#edf3ef] px-2.5 py-1 text-[10px] font-[720] text-[#597065]">
-                    <ShieldCheck className="h-3.5 w-3.5" /> Read only
+                    {folder.canUpload ? <><Upload className="h-3.5 w-3.5" /> Upload files</> : <><ShieldCheck className="h-3.5 w-3.5" /> Read only</>}
                   </span>
                   <span className="mt-3 flex items-center gap-1.5 text-[11px] text-[#707b73]">
                     <File className="h-3.5 w-3.5" />
@@ -268,7 +269,7 @@ export function UserProjectWorkspace({
                       <LockKeyhole className="h-8 w-8" />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[14px] font-[740] text-[#353d37]">
+                      <span className="block min-w-0 whitespace-normal break-words text-[14px] font-[740] text-[#353d37]">
                         {folder.ownerName}&apos;s Folder
                       </span>
                       <span className="mt-1 block truncate text-[10px] text-[#858e87]">

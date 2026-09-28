@@ -269,7 +269,7 @@ export function ProjectDetailWorkspace({
                       <p className="text-[11px] font-[600] leading-4 text-white/62">
                         Project Owner
                       </p>
-                      <p className="truncate text-[13px] font-[800] leading-5 text-white">
+                      <p className="min-w-0 whitespace-normal break-words text-[13px] font-[800] leading-5 text-white">
                         {project.createdBy}
                       </p>
                     </div>

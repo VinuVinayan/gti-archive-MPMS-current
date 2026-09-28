@@ -132,7 +132,7 @@ type StructuredSource = {
   status: { name: string } | null;
   inquiry: {
     deadline: Date | null;
-    parties: Array<{ snapshotName: string }>;
+    parties: Array<{ snapshotEntityType: string; snapshotName: string; snapshotCompany: string | null }>;
     deliverables: Array<{ label: string }>;
     targetMarkets: Array<{ label: string }>;
   } | null;
@@ -256,7 +256,7 @@ export const PROJECT_TRACKER_FIELD_REGISTRY: readonly FieldDefinition[] = [
     type: ProjectTrackerColumnType.CLIENT,
     aliases: ["client", "customer", "internal client", "beneficiary"],
     description: "Client names captured in the project inquiry.",
-    structured: (project) => compactValues(project.inquiry?.parties.map((party) => party.snapshotName) ?? []),
+    structured: (project) => compactValues(project.inquiry?.parties.map((party) => party.snapshotEntityType === "COMPANY" ? party.snapshotCompany || party.snapshotName : party.snapshotName) ?? []),
     flexible: () => null,
   },
   {
@@ -469,7 +469,7 @@ const structuredProjectTrackerSelect = {
       parties: {
         where: { role: "CLIENT" as const },
         orderBy: { sequence: "asc" as const },
-        select: { snapshotName: true },
+        select: { snapshotEntityType: true, snapshotName: true, snapshotCompany: true },
       },
       deliverables: { orderBy: { createdAt: "asc" as const }, select: { label: true } },
       targetMarkets: { orderBy: { createdAt: "asc" as const }, select: { label: true } },

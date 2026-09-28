@@ -1,6 +1,7 @@
 "use client";
 
-import NextImage from "next/image";
+import { FileThumbnail } from "@/components/projects/file-thumbnail";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
@@ -17,13 +18,13 @@ import {
   Box,
   Check,
   FileCheck2,
-  FileImage,
   FileOutput,
   FileText,
   Hash,
   HeartPulse,
   ImagePlus,
   ListChecks,
+  Loader2,
   Mail,
   MapPin,
   Palette,
@@ -43,7 +44,6 @@ import {
 
 import { ProjectAccessRealtimeGuard } from "@/components/projects/project-access-realtime-guard";
 import {
-  AssetImageThumbnail,
   AssetPreviewButton,
 } from "@/components/projects/asset-preview-button";
 import {
@@ -407,6 +407,63 @@ function formatReminderDate(value: string) {
   }).format(new Date(value));
 }
 
+function FileChecklistSwitcher({
+  files,
+  activeHandoffId,
+  disabled,
+  onSelect,
+}: {
+  files: StageFiveFileRecord[];
+  activeHandoffId: string;
+  disabled: boolean;
+  onSelect: (handoffId: string) => void;
+}) {
+  return (
+    <section aria-label="Final file checklists" className="overflow-x-auto pb-2">
+      <div className="flex min-w-max gap-3 lg:min-w-0 lg:flex-wrap">
+        {files.map((file, index) => {
+          const selected = file.handoffId === activeHandoffId;
+          return (
+            <button
+              key={file.handoffId}
+              type="button"
+              aria-pressed={selected}
+              disabled={disabled}
+              onClick={() => onSelect(file.handoffId)}
+              title={file.sourceAttachment.name}
+              className={cn(
+                "flex w-[230px] cursor-pointer items-center gap-3 rounded-[16px] border bg-white p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#72a184] focus-visible:ring-offset-2 disabled:cursor-wait",
+                selected
+                  ? "border-[#72a184] shadow-[0_10px_26px_rgba(35,93,59,.12)] ring-2 ring-[#dfeee4]"
+                  : "border-[#dfe6df] hover:border-[#b9cbbd]",
+              )}
+            >
+              <FileThumbnail
+                fileName={file.sourceAttachment.name}
+                mimeType={file.sourceAttachment.mimeType}
+                previewPath={`/api/project-assets/${file.sourceAttachment.id}/preview`}
+                className="size-11 rounded-[12px]"
+              />
+              <span className="min-w-0 flex-1">
+                <strong className="block truncate text-[12px] font-[720] text-[#27322b]">
+                  {file.sourceAttachment.name}
+                </strong>
+                <span className={cn(
+                  "mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-[740]",
+                  selected ? "bg-[#e4f2e7] text-[#2e744e]" : "bg-[#f0f3ef] text-[#6f7a72]",
+                )}>
+                  {selected ? <Check className="h-3 w-3" aria-hidden="true" /> : null}
+                  File {index + 1} of {files.length}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function ChecklistStatusBadge({ status }: { status: ProjectFileChecklistItemStatus }) {
   const filled = status === ProjectFileChecklistItemStatus.FILLED;
   const requested = status === ProjectFileChecklistItemStatus.REQUESTED;
@@ -719,17 +776,13 @@ function StageFiveReadOnlyView({
                         key={file.id}
                         className="inline-flex max-w-full items-center gap-2 rounded-[10px] border border-[#dfe6df] bg-[#f7faf7] px-3 py-2 text-[11px]"
                       >
-                        {file.attachmentId && file.mimeType.startsWith("image/") ? (
-                          <AssetImageThumbnail
-                            fileName={file.name}
-                            mimeType={file.mimeType}
-                            previewPath={`/api/project-assets/${file.attachmentId}/preview`}
-                            downloadPath={`/api/project-assets/${file.attachmentId}/download`}
-                            className="h-8 w-10"
-                          />
-                        ) : (
-                          <FileImage className="h-3.5 w-3.5 shrink-0 text-[#438060]" />
-                        )}
+                        <FileThumbnail
+                          fileName={file.name}
+                          mimeType={file.mimeType}
+                          file={file.file}
+                          previewPath={file.attachmentId ? `/api/project-assets/${file.attachmentId}/preview` : undefined}
+                          className="h-8 w-10"
+                        />
                         <span className="max-w-[320px] truncate font-[650]">{file.name}</span>
                         <span className="shrink-0 text-[#7c867f]">{formatFileSize(file.size)}</span>
                         {file.attachmentId ? (
@@ -1105,6 +1158,7 @@ export function StageFiveWorkspace({
     null,
   );
   const [isSaving, startSaving] = useTransition();
+  const [isSwitchingFile, startFileSwitch] = useTransition();
   const [saveProgress, setSaveProgress] = useState<ChecklistSaveProgress | null>(null);
   const [isRequestActionPending, startRequestAction] = useTransition();
   const [isCompleting, startCompleting] = useTransition();
@@ -1292,10 +1346,20 @@ export function StageFiveWorkspace({
   }
 
   function updateSelectedFile(handoffId: string) {
+    if (handoffId === selectedHandoffId || isSwitchingFile || isSaving || isDeleting || isUploadingSource || isCompleting) return;
+    const hasPendingUploads = Object.values(activeDraft?.files ?? {}).some(
+      (files) => files?.some((file) => Boolean(file.file) && !file.attachmentId),
+    );
+    if (hasPendingUploads) {
+      showWarningToast("Save Changes before switching files.", "Your selected attachments still need to be uploaded.");
+      return;
+    }
     const params = new URLSearchParams(window.location.search);
     params.set("file", handoffId);
     params.set("mode", mode);
-    router.replace(`/projects/${project.id}/stages/5?${params.toString()}`, { scroll: false });
+    startFileSwitch(() => {
+      router.replace(`/projects/${project.id}/stages/5?${params.toString()}`, { scroll: false });
+    });
   }
 
   function deleteSourceFile() {
@@ -1916,101 +1980,89 @@ export function StageFiveWorkspace({
             {showChrome ? <ProjectStageSummary project={project} className="mt-7" /> : null}
 
             {activeFile ? (
-              <div className="mt-5 flex flex-col gap-3 rounded-[16px] border border-[#dfe6df] bg-[#f8faf8] p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-[760] uppercase tracking-[0.1em] text-[#6e7a71]">File checklist for</p>
-                  <Select
-                    value={selectedHandoffId}
-                    onValueChange={updateSelectedFile}
-                  >
-                    <SelectTrigger
-                      className="mt-2 h-11 w-full max-w-[380px] overflow-hidden rounded-[12px] border border-[#d7e0d8] bg-white px-3 text-[13px] font-[680] text-[#263129] shadow-none focus-visible:border-[#82aa90] [&>span]:min-w-0 [&>span]:truncate sm:w-[380px]"
-                      aria-label="Current Stage 5 final file"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-[16px]">
-                      {pageData.files.map((file, index) => (
-                        <SelectItem
-                          key={file.handoffId}
-                          value={file.handoffId}
-                          className="rounded-[11px] text-[12px] font-[620]"
-                        >
-                          <span
-                            className="block max-w-[300px] truncate"
-                            title={file.sourceAttachment.name}
-                          >
-                            {file.sourceAttachment.name} — File {index + 1} of {pageData.files.length}
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              <div className="mt-5 space-y-3" aria-busy={isSwitchingFile}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-[12px] font-[740] text-[#27322b]">File checklist for</h2>
+                    <p className="mt-1 text-[11px] text-[#77827a]">Select a file to open its checklist.</p>
+                  </div>
                   {pageData.canUploadSource ? (
-                    <button
+                    <Button
                       type="button"
-                      className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-[700] text-[#2f7652] hover:text-[#205e40] disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={isUploadingSource}
+                      variant="secondary"
+                      size="sm"
+                      className="rounded-[12px] shadow-none"
+                      disabled={isUploadingSource || isSwitchingFile || isSaving}
                       onClick={() => sourceFileInputRef.current?.click()}
                     >
                       <Plus className="h-3.5 w-3.5" />
                       {isUploadingSource
                         ? `Uploading ${Math.round(sourceUploadProgress * 100)}%`
                         : "Add Another Final File"}
-                    </button>
+                    </Button>
                   ) : null}
                 </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  <a
-                    href={`/api/project-assets/${activeFile.sourceAttachment.id}/preview`}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label={`Preview ${activeFile.sourceAttachment.name}`}
-                    className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-[12px] border border-[#d9e2da] bg-white text-[#438060] shadow-[0_6px_16px_rgba(28,50,35,0.07)]"
-                  >
-                    {activeFile.sourceAttachment.mimeType.startsWith("image/") ? (
-                      <NextImage
-                        src={`/api/project-assets/${activeFile.sourceAttachment.id}/preview`}
-                        alt={`Preview of ${activeFile.sourceAttachment.name}`}
-                        width={64}
-                        height={64}
-                        unoptimized
-                        className="size-full object-contain"
+                <FileChecklistSwitcher
+                  files={pageData.files}
+                  activeHandoffId={selectedHandoffId}
+                  disabled={isSwitchingFile || isSaving || isDeleting || isUploadingSource || isCompleting}
+                  onSelect={updateSelectedFile}
+                />
+                {isSwitchingFile ? (
+                  <p role="status" className="flex items-center gap-2 text-[11px] text-[#4d765d]">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                    Loading checklist…
+                  </p>
+                ) : null}
+                <div className="flex flex-col gap-3 rounded-[16px] border border-[#dfe6df] bg-[#f8faf8] p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <a
+                      href={`/api/project-assets/${activeFile.sourceAttachment.id}/preview`}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`Preview ${activeFile.sourceAttachment.name}`}
+                      className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-[12px] border border-[#d9e2da] bg-white text-[#438060] shadow-[0_6px_16px_rgba(28,50,35,0.07)]"
+                    >
+                      <FileThumbnail
+                        fileName={activeFile.sourceAttachment.name}
+                        mimeType={activeFile.sourceAttachment.mimeType}
+                        previewPath={`/api/project-assets/${activeFile.sourceAttachment.id}/preview`}
+                        className="size-full rounded-none border-0 bg-transparent"
                       />
-                    ) : (
-                      <FileImage className="h-5 w-5" />
-                    )}
-                  </a>
-                  <div className="text-left sm:text-right">
-                    <p className="text-[12px] font-[700] text-[#2f6548]">
-                      {CHECKLIST_ITEMS.filter((item) => getItemStatus(item) === ProjectFileChecklistItemStatus.FILLED).length} / {CHECKLIST_ITEMS.length} filled
-                    </p>
-                    <p className="mt-1 text-[10px] text-[#7b867e]">{pageData.files.length} final {pageData.files.length === 1 ? "file" : "files"}</p>
-                    {activeFile.sourceOrigin === "DIRECT_STAGE_FIVE" ? (
-                      <p className="mt-1 text-[10px] font-[650] text-[#4d765d]">
-                        Uploaded directly in Stage 5
+                    </a>
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px] font-[700] text-[#27322b]" title={activeFile.sourceAttachment.name}>
+                        {activeFile.sourceAttachment.name}
                       </p>
-                    ) : activeFile.sourceOrigin === "STAGE_THREE" ? (
-                      <p className="mt-1 text-[10px] font-[650] text-[#4d765d]">
-                        Carried forward from Stage 3
+                      <p className="mt-1 text-[12px] font-[700] text-[#2f6548]">
+                        {CHECKLIST_ITEMS.filter((item) => getItemStatus(item) === ProjectFileChecklistItemStatus.FILLED).length} / {CHECKLIST_ITEMS.length} filled
                       </p>
-                    ) : null}
-                    {pageData.canEdit && !pageData.stageCompleted ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="mt-2 h-8 border-[#efc8c4] px-3 text-[11px] font-[700] text-[#aa4740] hover:bg-[#fff3f2] hover:text-[#923b35]"
-                        disabled={isDeleting}
-                        onClick={() => {
-                          setDeleteError("");
-                          setDeleteTarget(activeFile);
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" /> Delete File
-                      </Button>
-                    ) : null}
+                      {activeFile.sourceOrigin === "DIRECT_STAGE_FIVE" ? (
+                        <p className="mt-1 text-[10px] font-[650] text-[#4d765d]">
+                          Uploaded directly in Stage 5
+                        </p>
+                      ) : activeFile.sourceOrigin === "STAGE_THREE" ? (
+                        <p className="mt-1 text-[10px] font-[650] text-[#4d765d]">
+                          Carried forward from Stage 3
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
+                  {pageData.canEdit && !pageData.stageCompleted ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 rounded-[10px] border-[#efc8c4] px-3 text-[11px] font-[700] text-[#aa4740] hover:bg-[#fff3f2] hover:text-[#923b35]"
+                      disabled={isDeleting || isSwitchingFile || isSaving}
+                      onClick={() => {
+                        setDeleteError("");
+                        setDeleteTarget(activeFile);
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Delete File
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             ) : null}

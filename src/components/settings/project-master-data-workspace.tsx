@@ -912,7 +912,7 @@ function MasterDataDrawer({
                                     }
                                   />
                                   <span className="min-w-0">
-                                    <span className="block truncate text-[13px] font-[700] text-[#223126]">
+                                    <span className="block min-w-0 whitespace-normal break-words text-[13px] font-[700] text-[#223126]">
                                       {user.name}
                                     </span>
                                     <span className="block truncate text-[12px] text-[#6d776e]">

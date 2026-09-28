@@ -136,6 +136,7 @@ export async function getUserTasksPageData(
           name: true,
           workflowStageKey: true,
           approvedAttachmentId: true,
+          completionRequestedAt: true,
           updatedAt: true,
           project: {
             select: {

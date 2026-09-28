@@ -71,7 +71,7 @@ function FlexibleProjectCard({ project }: { project: FlexibleProjectListItem }) 
             <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[#287e53] text-[9px] font-[750] text-white">{initials(project.owner.name)}</span>
             <div className="min-w-0">
               <p className="text-[10px] font-[600] text-[#838b85]">Owner</p>
-              <p className="truncate text-[12px] font-[650] text-[#333d36]">{project.owner.name}</p>
+              <p className="min-w-0 whitespace-normal break-words text-[12px] font-[650] text-[#333d36]">{project.owner.name}</p>
             </div>
           </div>
           <div className="flex min-w-0 items-center gap-2.5">

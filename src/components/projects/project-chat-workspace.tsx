@@ -1,5 +1,7 @@
 "use client";
 
+import { FileThumbnail, canShowImageThumbnail } from "@/components/projects/file-thumbnail";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -137,6 +139,9 @@ import type {
 import type { ProjectCompletionWorkflowRecord } from "@/lib/project-completion";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 import type { StageHistoryRecord } from "@/lib/project-history";
+import { RequestConceptCompletionButton } from "@/components/projects/request-concept-completion-button";
+import { CompleteConceptTaskButton } from "@/components/projects/complete-concept-task-button";
+import { RevokeTaskCompletionButton } from "@/components/projects/revoke-task-completion-button";
 import type { ProjectConceptChatMode } from "@/lib/project-concepts";
 import type {
   StageChatRealtimeMessageCreatedPayload,
@@ -194,6 +199,7 @@ type UploadProgressState = "pending" | "uploading" | "uploaded" | "error";
 type OptimisticMessageStatus = "sending" | "uploading" | "failed";
 
 type DisplayAttachmentRecord = ProjectAttachmentRecord & {
+  localFile?: File;
   uploadState?: UploadProgressState;
   progress?: number;
   errorMessage?: string;
@@ -1900,7 +1906,7 @@ function AttachmentHistoryList({
             >
               <div className="flex min-w-0 items-start gap-3">
                 {!attachment.uploadState &&
-                attachment.mimeType.startsWith("image/") &&
+                canShowImageThumbnail(attachment.originalFileName, attachment.mimeType) &&
                 attachment.previewPath ? (
                   <AssetImageThumbnail
                     fileName={attachment.originalFileName}
@@ -1910,13 +1916,13 @@ function AttachmentHistoryList({
                     interactive={!canShowFileActions}
                   />
                 ) : (
-                  <div
-                    className={`grid h-8 w-8 shrink-0 place-items-center rounded-md text-[10px] font-semibold ${getFileBadgeClass(
-                      attachment.fileTypeLabel,
-                    )}`}
-                  >
-                    {attachment.fileTypeLabel}
-                  </div>
+                  <FileThumbnail
+                    fileName={attachment.originalFileName}
+                    mimeType={attachment.mimeType}
+                    file={attachment.localFile}
+                    previewPath={attachment.previewPath}
+                    fallback={<span className={`grid h-full w-full place-items-center text-[10px] font-semibold ${getFileBadgeClass(attachment.fileTypeLabel)}`}>{attachment.fileTypeLabel}</span>}
+                  />
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -2235,7 +2241,7 @@ function ProjectAssetCard({
     favoriteOverrides?.[attachment.id] ?? attachment.isFavoritedByCurrentUser;
 
   return (
-    <article className="group flex aspect-square min-h-[150px] min-w-0 flex-col overflow-hidden rounded-[18px] border border-[#dce6dd] bg-[#fbfcfa] p-3 shadow-[0_8px_20px_rgba(18,35,23,0.04)] transition duration-200 hover:-translate-y-0.5 hover:border-brand/35 hover:bg-white hover:shadow-[0_16px_34px_rgba(18,35,23,0.09)]">
+    <article className="group flex min-h-[190px] min-w-0 flex-col overflow-hidden rounded-[18px] border border-[#dce6dd] bg-[#fbfcfa] p-3 shadow-[0_8px_20px_rgba(18,35,23,0.04)] transition duration-200 hover:-translate-y-0.5 hover:border-brand/35 hover:bg-white hover:shadow-[0_16px_34px_rgba(18,35,23,0.09)]">
       <div className="min-w-0">
         <div
           className="flex min-w-0 items-baseline text-[12px] font-[800] leading-4 text-[#111712]"
@@ -2244,20 +2250,20 @@ function ProjectAssetCard({
           <span className="min-w-0 truncate">{stem}</span>
           {extension ? <span className="shrink-0">{extension}</span> : null}
         </div>
-        <p className="mt-1 truncate text-[11px] font-[600] leading-4 text-[#667168]">
+        <p className="mt-1 min-w-0 whitespace-normal break-words text-[11px] font-[600] leading-4 text-[#667168]">
           Uploaded by {uploadedBy}
         </p>
       </div>
 
       <div className="mt-3 min-w-0 space-y-1.5">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <span
-            className={`inline-flex h-6 max-w-full shrink-0 items-center justify-center rounded-md px-2 text-[9px] font-[800] uppercase leading-none ${getFileBadgeClass(
-              attachment.fileTypeLabel,
-            )}`}
-          >
-            {attachment.fileTypeLabel}
-          </span>
+          <FileThumbnail
+            fileName={attachment.originalFileName}
+            mimeType={attachment.mimeType}
+            file={attachment.localFile}
+            previewPath={attachment.previewPath}
+            fallback={<span className={`grid h-full w-full place-items-center text-[10px] font-semibold ${getFileBadgeClass(attachment.fileTypeLabel)}`}>{attachment.fileTypeLabel}</span>}
+          />
           <span className="truncate text-[10px] font-[600] leading-4 text-[#7a837b]">
             {attachment.fileSizeLabel}
           </span>
@@ -6443,6 +6449,7 @@ export function ProjectChatWorkspace({
       localCreatedAtMs,
       attachments: filesToUpload.map((pendingFile) => ({
         id: pendingFile.id,
+        localFile: pendingFile.file,
         assetType: pendingFile.assetType ?? "COMMENT_ATTACHMENT",
         isSubmission: pendingFile.assetType === "STAGE_SUBMISSION",
         originalFileName: pendingFile.file.name,
@@ -6964,6 +6971,7 @@ export function ProjectChatWorkspace({
         localCreatedAtMs,
         attachments: filesToUpload.map((pendingFile) => ({
           id: pendingFile.id,
+          localFile: pendingFile.file,
           assetType: "REVISION_ORIGINAL",
           isSubmission: false,
           originalFileName: pendingFile.file.name,
@@ -7856,6 +7864,20 @@ export function ProjectChatWorkspace({
                 </div>
               ))}
             </dl>
+            {conceptMode.completedWithoutFile ? <span className="rounded-full bg-[#e7f5eb] px-3 py-1.5 text-[11px] font-semibold text-[#247247]">Completed · No file</span> : null}
+            <RevokeTaskCompletionButton projectId={project.id} folderId={conceptMode.folderId} stageKey={conceptMode.workflowStageKey}
+              name={conceptMode.conceptName} eligibility={conceptMode.completionRevocationEligibility}
+              onReopened={() => setStageCardOverrides((current) => {
+                const next = { ...current };
+                if (activeStage) delete next[activeStage.id];
+                return next;
+              })} />
+            {conceptMode.canCompleteWithoutFile && activeStage && !isStageCompleted ? (
+              <CompleteConceptTaskButton projectId={project.id} folderId={conceptMode.folderId} stageKey={conceptMode.workflowStageKey} name={conceptMode.conceptName} completionRequest={conceptMode.completionRequest} onCompleted={() => setStageCardOverrides((current) => ({
+                ...current, [activeStage.id]: { ...current[activeStage.id], actualStartedAt: activeStage.actualStartedAt, actualStartedAtValue: activeStage.actualStartedAtValue, status: "completed" },
+              }))} />
+            ) : null}
+            {conceptMode.canRequestCompletion && !isStageCompleted ? <RequestConceptCompletionButton projectId={project.id} folderId={conceptMode.folderId} stageKey={conceptMode.workflowStageKey} name={conceptMode.conceptName} /> : null}
             {canRevokeConceptApproval ? (
               <Button
                 type="button"
@@ -7880,6 +7902,13 @@ export function ProjectChatWorkspace({
               deadline={activeStage?.plannedDueAtValue ?? null}
             />
           </div>
+          {conceptMode.completionRequest && !isStageCompleted ? (
+            <div role="status" className="mt-3 rounded-xl border border-[#d9cfeb] bg-[#f7f3fc] px-4 py-3 text-sm text-[#60417f]">
+              <p className="font-semibold">Waiting for completion review</p>
+              <p className="mt-1">{conceptMode.assignedExecutor?.name?.trim() || conceptMode.assignedExecutor?.email || "The assigned executor"} requested completion without a file. The project owner can review the work and complete the task.</p>
+              {conceptMode.completionRequest.note ? <p className="mt-2 max-h-28 overflow-y-auto whitespace-pre-wrap break-words">{conceptMode.completionRequest.note}</p> : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
       <div
@@ -8861,7 +8890,7 @@ export function ProjectChatWorkspace({
                           </div>
                           <div className="mt-3 flex items-center gap-2">
                             <div className="min-w-0">
-	                              <p className="truncate text-[13px] font-[700] text-[#111712]">
+	                              <p className="min-w-0 whitespace-normal break-words text-[13px] font-[700] text-[#111712]">
 	                                {getActorDisplayName(
                                   message.author,
                                   currentUserDisplayName,
@@ -9050,7 +9079,7 @@ export function ProjectChatWorkspace({
                           </span>
 	                        ) : (
 	                          <div className="min-w-0">
-	                            <p className="truncate text-[12px] font-semibold text-[#111712]">
+	                            <p className="min-w-0 whitespace-normal break-words text-[12px] font-semibold text-[#111712]">
 	                              {getActorDisplayName(
                                 message.author,
                                 currentUserDisplayName,
@@ -9415,6 +9444,7 @@ export function ProjectChatWorkspace({
                           Attachment
                         </span>
                       )}
+                      <FileThumbnail fileName={pendingFile.file.name} mimeType={pendingFile.file.type} file={pendingFile.file} className="h-8 w-10" />
                       <span className="max-w-[180px] truncate">{pendingFile.file.name}</span>
                       <button
                         type="button"
@@ -9555,7 +9585,7 @@ export function ProjectChatWorkspace({
                               {getInitials(participant.name)}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-[14px] font-semibold text-[#173120]">
+                              <p className="min-w-0 whitespace-normal break-words text-[14px] font-semibold text-[#173120]">
                                 {participant.name}
                               </p>
                               <p className="truncate text-[12px] text-[#68736a]">
@@ -9708,7 +9738,7 @@ export function ProjectChatWorkspace({
                   <dl className="space-y-2 text-[12px] text-[#344139]">
                     <div className="flex items-center justify-between gap-3">
                       <dt className="font-semibold text-[#6b776e]">Assigned Executor</dt>
-                      <dd className="truncate font-[750]">
+                      <dd className="min-w-0 whitespace-normal break-words font-[750]">
                         {conceptMode.assignedExecutor?.name?.trim() ||
                           conceptMode.assignedExecutor?.email ||
                           "Unassigned"}
@@ -10567,13 +10597,12 @@ export function ProjectChatWorkspace({
                         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
                           <div className="space-y-2">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span
-                                className={`inline-flex h-8 min-w-8 items-center justify-center rounded-md px-2 text-[10px] font-semibold ${getFileBadgeClass(
-                                  file.fileTypeLabel,
-                                )}`}
-                              >
-                                {file.fileTypeLabel}
-                              </span>
+                              <FileThumbnail
+                                fileName={file.originalFileName}
+                                mimeType={file.mimeType}
+                                previewPath={file.previewPath}
+                                fallback={<span className={`grid h-full w-full place-items-center text-[10px] font-semibold ${getFileBadgeClass(file.fileTypeLabel)}`}>{file.fileTypeLabel}</span>}
+                              />
                               <p className="truncate text-[14px] font-semibold text-[#111712]">
                                 {file.originalFileName}
                               </p>
@@ -11015,6 +11044,7 @@ export function ProjectChatWorkspace({
                           key={pendingFile.id}
                           className="inline-flex items-center gap-2 rounded-full border border-[#d6dfd7] bg-white px-3 py-1.5 text-[11px] text-[#324138]"
                         >
+                          <FileThumbnail fileName={pendingFile.file.name} mimeType={pendingFile.file.type} file={pendingFile.file} className="h-8 w-10" />
                           <span className="max-w-[220px] truncate">{pendingFile.file.name}</span>
                           <button
                             type="button"

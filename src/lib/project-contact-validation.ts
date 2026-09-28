@@ -1,13 +1,31 @@
+export type ProjectContactEntityType = "PERSON" | "COMPANY";
+
 export type ProjectContactInput = {
-  name: string;
+  kind?: "CLIENT" | "CONTACT";
+  entityType?: ProjectContactEntityType;
+  name?: string;
   company?: string;
+  companyEmail?: string;
+  companyPhone?: string;
+  companyWebsite?: string;
   position?: string;
   email?: string;
   phone?: string;
 };
 
-export type ProjectContactField = keyof ProjectContactInput;
+export type ProjectContactField = Exclude<keyof ProjectContactInput, "kind">;
 export type ProjectContactFieldErrors = Partial<Record<ProjectContactField, string>>;
+
+export function getRequiredProjectContactFields(
+  input: Pick<ProjectContactInput, "kind" | "entityType">,
+): readonly ProjectContactField[] {
+  if (input.kind === "CLIENT") {
+    return input.entityType === "PERSON" ? ["name", "company"] : ["company"];
+  }
+  if (input.entityType === "COMPANY") return ["company", "name", "email", "phone", "position"];
+  if (input.entityType === "PERSON") return ["name", "email", "phone", "position"];
+  return ["name"];
+}
 
 const MAX_CONTACT_NAME_LENGTH = 160;
 const MAX_CONTACT_COMPANY_LENGTH = 160;
@@ -78,15 +96,53 @@ export function normalizeInternationalPhone(value: string) {
 
 export function validateProjectContactInput(input: ProjectContactInput) {
   const fieldErrors: ProjectContactFieldErrors = {};
+  const requiredFields = getRequiredProjectContactFields(input);
+  const entityType = input.entityType ?? (input.kind === "CLIENT" ? "COMPANY" : "PERSON");
+  const isCompany = entityType === "COMPANY";
+  if (entityType !== "PERSON" && entityType !== "COMPANY") {
+    fieldErrors.entityType = "Select Person or Company.";
+  }
   const name = normalizeWhitespace(input.name ?? "");
   const company = normalizeWhitespace(input.company ?? "");
   const position = normalizeWhitespace(input.position ?? "");
   const email = normalizeProjectContactEmail(input.email ?? "");
   const rawPhone = input.phone?.trim() ?? "";
   const phone = rawPhone ? normalizeInternationalPhone(rawPhone) : "";
+  const companyEmail = isCompany ? normalizeProjectContactEmail(input.companyEmail ?? "") : "";
+  const rawCompanyPhone = isCompany ? input.companyPhone?.trim() ?? "" : "";
+  const companyPhone = rawCompanyPhone ? normalizeInternationalPhone(rawCompanyPhone) : "";
+  const rawWebsite = isCompany ? input.companyWebsite?.trim() ?? "" : "";
+  let companyWebsite = rawWebsite;
 
-  if (!name) {
-    fieldErrors.name = "Name is required.";
+  if (rawWebsite) {
+    try {
+      const url = new URL(
+        /^[a-z][a-z\d+.-]*:/i.test(rawWebsite) ? rawWebsite : `https://${rawWebsite}`,
+      );
+      if (
+        !["http:", "https:"].includes(url.protocol) ||
+        !url.hostname.includes(".") ||
+        !url.hostname.split(".").every((label) => EMAIL_DOMAIN_LABEL_PATTERN.test(label)) ||
+        url.username || url.password ||
+        rawWebsite.length > 2048 || /\s/.test(rawWebsite)
+      ) {
+        throw new Error("Invalid website");
+      }
+      companyWebsite = url.href;
+    } catch {
+      fieldErrors.companyWebsite = "Enter a valid company website, e.g. https://example.com.";
+    }
+  }
+
+  if (requiredFields.includes("company") && !company) fieldErrors.company = "Company name is required.";
+  if (requiredFields.includes("email") && !email) fieldErrors.email = isCompany ? "Representative email is required." : "Email is required.";
+  if (requiredFields.includes("phone") && !rawPhone) fieldErrors.phone = isCompany ? "Representative contact number is required." : "Contact number is required.";
+  if (requiredFields.includes("position") && !position) fieldErrors.position = isCompany ? "Representative designation is required." : "Designation is required.";
+
+  if (requiredFields.includes("name") && !name) {
+    fieldErrors.name = isCompany
+      ? "Contact person / representative is required."
+      : "Name is required.";
   } else if (name.length > MAX_CONTACT_NAME_LENGTH) {
     fieldErrors.name = `Keep the name under ${MAX_CONTACT_NAME_LENGTH} characters.`;
   }
@@ -108,11 +164,23 @@ export function validateProjectContactInput(input: ProjectContactInput) {
       "Enter a valid international phone number including country code.";
   }
 
+  if (companyEmail && !isValidProjectContactEmail(companyEmail)) {
+    fieldErrors.companyEmail = "Enter a valid company email address.";
+  }
+  if (rawCompanyPhone && !companyPhone) {
+    fieldErrors.companyPhone = "Enter a valid international phone number including country code.";
+  }
+
   return {
     fieldErrors,
     data: {
+      kind: input.kind ?? "CONTACT",
+      entityType,
       name,
       company,
+      companyEmail,
+      companyPhone: companyPhone ?? "",
+      companyWebsite,
       position,
       email,
       phone: phone ?? "",

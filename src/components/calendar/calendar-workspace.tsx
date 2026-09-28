@@ -721,7 +721,7 @@ export function CalendarWorkspace({
                     <p className="text-[12px] font-[700] uppercase tracking-[0.08em] text-[#7a837b]">
                       Created by
                     </p>
-                    <p className="mt-1 truncate text-[14px] font-[600] text-[#1b241e]">
+                    <p className="mt-1 min-w-0 whitespace-normal break-words text-[14px] font-[600] text-[#1b241e]">
                       {selectedEvent.createdByName ?? selectedEvent.createdByEmail}
                     </p>
                     {selectedEvent.createdByEmail ? (
@@ -982,7 +982,7 @@ export function CalendarWorkspace({
                       {getInitials(collaborator.name)}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[13px] font-[600] text-[#232c26]">
+                      <p className="min-w-0 whitespace-normal break-words text-[13px] font-[600] text-[#232c26]">
                         {collaborator.name}
                       </p>
                       <p className="text-[10px] text-[#50b848]">

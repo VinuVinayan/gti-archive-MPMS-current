@@ -29,6 +29,7 @@ import {
   validateProjectResearchTextContent,
 } from "../src/lib/project-research-text-file";
 import { prisma } from "../src/lib/prisma";
+import { completeAttachmentUpload, deleteAttachmentForUser } from "../src/lib/project-history";
 import { getInitialProjectWorkflowStageData } from "../src/lib/project-workflow";
 import { updateProjectCollaborators } from "../src/lib/projects";
 
@@ -221,10 +222,8 @@ async function main() {
   );
   check(
     Boolean(
-      await prisma.projectPrivateFolder.findUnique({
-        where: {
-          projectId_ownerUserId: { projectId, ownerUserId: users.lateCollaborator.id },
-        },
+      await prisma.projectPrivateFolder.findFirst({
+        where: { projectId, ownerUserId: users.lateCollaborator.id, parentFolderId: null },
       }),
     ),
     "adding a project collaborator must provision their private folder",
@@ -348,11 +347,11 @@ async function main() {
     "historical participant research folders must not accept uploads",
   );
 
-  const ownerPrivateFolder = await prisma.projectPrivateFolder.findUniqueOrThrow({
-    where: { projectId_ownerUserId: { projectId, ownerUserId: users.owner.id } },
+  const ownerPrivateFolder = await prisma.projectPrivateFolder.findFirstOrThrow({
+    where: { projectId, ownerUserId: users.owner.id, parentFolderId: null },
   });
-  const coOwnerPrivateFolder = await prisma.projectPrivateFolder.findUniqueOrThrow({
-    where: { projectId_ownerUserId: { projectId, ownerUserId: users.coOwner.id } },
+  const coOwnerPrivateFolder = await prisma.projectPrivateFolder.findFirstOrThrow({
+    where: { projectId, ownerUserId: users.coOwner.id, parentFolderId: null },
   });
   check(
     (await getProjectPrivateFolderPageData(users.owner, {
@@ -380,6 +379,7 @@ async function main() {
 
   const canonicalBrief = canonicalWorkspace.folders.find((folder) => folder.systemKey === "BRIEF")!;
   const canonicalTech = canonicalWorkspace.folders.find((folder) => folder.systemKey === "TECH")!;
+  const canonicalMarket = canonicalWorkspace.folders.find((folder) => folder.systemKey === "MARKET_COMPETITION")!;
   const custom = await createProjectResearchFolder(users.adminOutsider, {
     projectId,
     name: "  Customer   Interviews ",
@@ -439,21 +439,54 @@ async function main() {
   check(
     userBriefPage?.files.length === 1 &&
       !userBriefPage.canWrite &&
+      userBriefPage.canUpload &&
       userTechPage?.files.length === 1 &&
-      !userTechPage.canWrite,
-    "USER Brief and Tech references must remain readable and read-only",
+      !userTechPage.canWrite &&
+      userTechPage.canUpload,
+    "USER Brief and Tech allow uploads while folder management remains restricted",
   );
-  await expectRejected(
-    () =>
-      requestProjectResearchFileUpload(users.executor, {
-        projectId,
-        folderId: canonicalBrief.id,
-        originalFileName: "forbidden.txt",
-        mimeType: "text/plain",
-        fileSize: 1,
-      }),
-    "USER accounts must not mutate canonical shared folders",
-  );
+  const participantUploadInput = {
+    projectId, folderId: canonicalBrief.id,
+    originalFileName: "participant-reference.txt", mimeType: "text/plain", fileSize: 16,
+  };
+  for (const participant of [users.executor, users.collaborator]) {
+    for (const folder of [canonicalBrief, canonicalTech]) {
+      const prepared = await requestProjectResearchFileUpload(participant, { ...participantUploadInput, folderId: folder.id });
+      check(!("error" in prepared), "Executors and collaborators must prepare uploads into both Brief and Tech");
+      const completed = await completeProjectResearchFileUpload(participant, { projectId, folderId: folder.id, attachmentId: prepared.attachmentId });
+      check(completed?.uploadedBy === participant.name, "Upload completion must return the uploader's full name");
+      const reloaded = await getProjectResearchFolderPageData(users.owner, { projectId, folderId: folder.id });
+      check(reloaded?.files.find((file) => file.id === completed.id)?.uploadedBy === participant.name, "Other users must see the uploader's full name after reloading");
+      await expectRejected(() => deleteProjectResearchFile(participant, { projectId, folderId: folder.id, fileId: completed.id }), "Uploading must not grant file-deletion permission");
+      await expectRejected(() => deleteAttachmentForUser(participant, completed.attachmentId), "The generic delete endpoint must retain management permissions");
+    }
+  }
+  const techChild = await createProjectResearchFolder(users.owner, { projectId, parentFolderId: canonicalTech.id, name: "Technical References" });
+  check("folder" in techChild && techChild.folder, "A manager must be able to create a Tech subfolder");
+  const nestedUpload = await requestProjectResearchFileUpload(users.executor, { ...participantUploadInput, folderId: techChild.folder.id });
+  check(!("error" in nestedUpload), "Tech subfolders inherit participant upload permission");
+  check((await completeProjectResearchFileUpload(users.executor, { projectId, folderId: techChild.folder.id, attachmentId: nestedUpload.attachmentId }))?.uploadedBy === users.executor.name, "Nested uploads preserve the full uploader name");
+  for (const folder of [canonicalMarket, customFolder]) {
+    if (folder) await expectRejected(() => requestProjectResearchFileUpload(users.executor, { ...participantUploadInput, folderId: folder.id }), "Participant uploads must stay inside Brief and Tech");
+  }
+  await expectRejected(() => requestProjectResearchFileUpload(users.outsider, participantUploadInput), "Users outside the project must not upload into shared folders");
+  const pendingParticipantUpload = await requestProjectResearchFileUpload(users.executor, participantUploadInput);
+  check(!("error" in pendingParticipantUpload), "Participant upload must prepare before completion checks");
+  await expectRejected(() => completeAttachmentUpload(users.collaborator, pendingParticipantUpload.attachmentId, false, undefined, { researchFolderId: canonicalBrief.id }), "Only the original uploader may complete a shared upload");
+  await expectRejected(() => completeProjectResearchFileUpload(users.executor, { projectId, folderId: canonicalTech.id, attachmentId: pendingParticipantUpload.attachmentId }), "Uploads cannot be completed in a different folder");
+  await prisma.projectWorkflowStage.updateMany({ where: { projectId, stageKey: ProjectWorkflowStageKey.PROJECT_RESEARCH_AND_PLANNING }, data: { status: "LOCKED" } });
+  check((await getProjectResearchFolderPageData(users.executor, { projectId, folderId: canonicalBrief.id }))?.canUpload === false, "Locked shared folders remain viewable with uploads disabled");
+  await expectRejected(() => requestProjectResearchFileUpload(users.executor, participantUploadInput), "Locked stages must reject new participant uploads");
+  await expectRejected(() => completeProjectResearchFileUpload(users.executor, { projectId, folderId: canonicalBrief.id, attachmentId: pendingParticipantUpload.attachmentId }), "Locking a stage must prevent completion of pending uploads");
+  await prisma.projectWorkflowStage.updateMany({ where: { projectId, stageKey: ProjectWorkflowStageKey.PROJECT_RESEARCH_AND_PLANNING }, data: { status: "AVAILABLE" } });
+  const originalExecutor = await prisma.projectExecutor.findFirstOrThrow({ where: { projectId, userId: users.executor.id } });
+  const originalCollaborator = await prisma.projectCollaborator.findFirstOrThrow({ where: { projectId, userId: users.executor.id } });
+  await prisma.projectExecutor.delete({ where: { projectId_userId: { projectId, userId: users.executor.id } } });
+  check((await getProjectResearchFolderPageData(users.executor, { projectId, folderId: canonicalBrief.id }))?.canUpload, "A remaining collaborator assignment must preserve upload access");
+  await prisma.projectCollaborator.delete({ where: { projectId_userId: { projectId, userId: users.executor.id } } });
+  await expectRejected(() => completeProjectResearchFileUpload(users.executor, { projectId, folderId: canonicalBrief.id, attachmentId: pendingParticipantUpload.attachmentId }), "Removed participants cannot complete pending uploads");
+  await prisma.projectExecutor.create({ data: originalExecutor });
+  await prisma.projectCollaborator.create({ data: originalCollaborator });
   check(
     expectError(await createProjectResearchFolder(users.executor, { projectId, name: "Forbidden USER Folder" })),
     "USER accounts must not create shared folders",
@@ -512,6 +545,9 @@ async function main() {
     where: { id: projectId },
     data: { completedAt: new Date() },
   });
+  check((await getProjectResearchFolderPageData(users.executor, { projectId, folderId: canonicalBrief.id }))?.canUpload === false, "Completed projects disable participant upload controls");
+  await expectRejected(() => requestProjectResearchFileUpload(users.executor, participantUploadInput), "Completed projects must reject participant uploads");
+  await expectRejected(() => completeProjectResearchFileUpload(users.executor, { projectId, folderId: canonicalBrief.id, attachmentId: pendingParticipantUpload.attachmentId }), "Completed projects must reject pending upload completion");
   const completedProjectWorkspace = await getProjectResearchPageData(
     users.owner,
     projectId,

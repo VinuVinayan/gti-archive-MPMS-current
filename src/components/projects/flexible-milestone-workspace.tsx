@@ -1,5 +1,7 @@
 "use client";
 
+import { FileThumbnail } from "@/components/projects/file-thumbnail";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -9,7 +11,6 @@ import {
   CheckCircle2,
   Download,
   Eye,
-  FileText,
   Loader2,
   NotebookPen,
   Pencil,
@@ -266,9 +267,7 @@ export function FlexibleMilestoneWorkspace({
               <div className="mt-5 divide-y divide-[#e8ece8] rounded-[18px] border border-[#e0e6e0]">
                 {milestone.attachments.map((attachment) => (
                   <div key={attachment.id} className="flex flex-wrap items-center gap-3 px-4 py-3.5">
-                    <span className="grid size-10 place-items-center rounded-[12px] bg-[#eef6f0] text-[#287e53]">
-                      <FileText className="size-4.5" />
-                    </span>
+                    <FileThumbnail fileName={attachment.originalFileName} mimeType={attachment.mimeType} previewPath={`/api/flexible-project-attachments/${attachment.id}/preview`} className="size-10 rounded-[12px]" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[13px] font-[700] text-[#303a33]">{attachment.originalFileName}</p>
                       <p className="mt-0.5 text-[10px] text-[#7a837c]">{formatBytes(attachment.fileSize)} · Added by {attachment.uploadedBy.name}</p>

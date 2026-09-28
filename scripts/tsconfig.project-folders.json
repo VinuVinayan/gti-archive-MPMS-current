@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.project-research-integration.json",
+  "compilerOptions": { "outDir": "../.tmp/project-folders" },
+  "include": ["project-folder-integration-check.ts"]
+}

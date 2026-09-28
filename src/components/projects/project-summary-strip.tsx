@@ -79,22 +79,24 @@ export function ProjectPeopleSummary({
   people,
   groupLabel,
   emptyLabel = "None",
+  visibleCount = 1,
 }: {
   people: ProjectSummaryPerson[];
   groupLabel: string;
   emptyLabel?: string;
+  visibleCount?: number;
 }) {
   if (!people.length) {
     return <span className="text-[#89928b]">{emptyLabel}</span>;
   }
 
-  const visiblePeople = people.slice(0, 1);
+  const visiblePeople = people.slice(0, visibleCount);
   const remainingCount = people.length - visiblePeople.length;
   const visibleNames = visiblePeople.map((person) => person.name).join(", ");
 
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <span className="min-w-0 truncate" title={visibleNames}>
+      <span className="min-w-0 whitespace-normal break-words" title={visibleNames}>
         {visibleNames}
       </span>
       {remainingCount > 0 ? (
@@ -123,7 +125,7 @@ export function ProjectPeopleSummary({
                     {getInitials(person.name)}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[12px] font-[680] text-[#28332b]" title={person.name}>
+                    <span className="block min-w-0 whitespace-normal break-words text-[12px] font-[680] text-[#28332b]" title={person.name}>
                       {person.name}
                     </span>
                     {person.email ? (
@@ -181,7 +183,7 @@ export function ProjectSummaryStrip({
             icon={<UserRound className="h-[16px] w-[16px]" />}
             label="Project Owner"
           >
-            <span className="block truncate" title={owner?.name ?? ownerEmptyLabel}>
+            <span className="block min-w-0 whitespace-normal break-words" title={owner?.name ?? ownerEmptyLabel}>
               {owner?.name ?? ownerEmptyLabel}
             </span>
           </ProjectSummaryItem>
@@ -203,6 +205,7 @@ export function ProjectSummaryStrip({
               people={executors}
               groupLabel="Project Executors"
               emptyLabel={executorEmptyLabel}
+              visibleCount={3}
             />
           </ProjectSummaryItem>
         </dl>

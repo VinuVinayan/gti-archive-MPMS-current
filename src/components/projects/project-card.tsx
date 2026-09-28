@@ -253,7 +253,7 @@ export function ProjectCard({ project, returnHref }: ProjectCardProps) {
               {project.owner ? (
                 <div className="mt-1.5 flex min-w-0 items-center gap-2">
                   <PersonAvatar person={project.owner} />
-                  <span className="truncate text-[12px] font-[500] text-[#303831]">{project.owner.name}</span>
+                  <span className="min-w-0 whitespace-normal break-words text-[12px] font-[500] text-[#303831]">{project.owner.name}</span>
                 </div>
               ) : (
                 <p className="mt-2 text-[12px] text-[#9a6a24]">Unassigned</p>

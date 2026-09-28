@@ -35,7 +35,7 @@ import {
   getProjectResearchFolderPageData,
   getProjectResearchPageData,
 } from "../src/lib/project-research";
-import { requestProjectResearchFileUpload } from "../src/lib/project-research-files";
+import { completeProjectResearchFileUpload, requestProjectResearchFileUpload } from "../src/lib/project-research-files";
 import { prisma } from "../src/lib/prisma";
 import type { PermissionKey } from "../src/lib/permissions/definitions";
 import { getUserProjectWorkspace } from "../src/lib/user-project-workspace";
@@ -286,8 +286,8 @@ async function main() {
       projectId,
       folderId: ownerTech.id,
     });
-    check(sharedBriefPage?.files.length === 1 && sharedBriefPage.canWrite === false, "USER must read canonical Brief without write access");
-    check(sharedTechPage?.canWrite === false, "USER must read canonical Tech without write access");
+    check(sharedBriefPage?.files.length === 1 && sharedBriefPage.canUpload && sharedBriefPage.canWrite === false, "USER must be able to upload into Brief while management stays restricted");
+    check(sharedTechPage?.canUpload && sharedTechPage.canWrite === false, "USER must be able to upload into Tech while management stays restricted");
     check(
       (await getProjectResearchFolderPageData(users.userOne, {
         projectId,
@@ -303,17 +303,13 @@ async function main() {
       Boolean(await getProjectResearchPageData(users.owner, projectId)),
       "ADMIN research workspace must remain available",
     );
-    await expectDenied(
-      () =>
-        requestProjectResearchFileUpload(users.userOne, {
-          projectId,
-          folderId: ownerBrief.id,
-          originalFileName: "forbidden.pdf",
-          mimeType: "application/pdf",
-          fileSize: 128,
-        }),
-      "USER upload to canonical Brief must be denied",
-    );
+    const sharedUpload = await requestProjectResearchFileUpload(users.userOne, {
+      projectId, folderId: ownerTech.id, originalFileName: "shared.pdf", mimeType: "application/pdf", fileSize: 128,
+    });
+    check(!isError(sharedUpload), "USER must prepare a shared Tech upload");
+    const sharedFile = await completeProjectResearchFileUpload(users.userOne, { projectId, folderId: ownerTech.id, attachmentId: sharedUpload.attachmentId });
+    check(sharedFile?.uploadedBy === users.userOne.name, "Shared upload response must show the user's full name");
+    check((await getProjectResearchFolderPageData(users.userTwo, { projectId, folderId: ownerTech.id }))?.files[0].uploadedBy === users.userOne.name, "Other participants must see the full uploader name");
     const forbiddenFolder = await createProjectResearchFolder(users.userOne, {
       projectId,
       name: "Forbidden USER Folder",
@@ -366,6 +362,7 @@ async function main() {
       "project.list must not expose the USER project workspace when project.view is disabled",
     );
     check(workspace.sharedFolders.map((folder) => folder.name).join(",") === "Brief,Tech", "workspace must expose exactly Brief and Tech");
+    check(workspace.sharedFolders.every((folder) => folder.canUpload), "USER workspace cards must advertise upload access");
     check(workspace.sharedFolders[0]?.fileCount === 1, "canonical Brief file count is incorrect");
     check(workspace.assignedConcepts.length === 3, "only USER One assigned concepts must be returned");
     check(!workspace.assignedConcepts.some((concept) => concept.name === "Concept D"), "another USER's concept leaked");
@@ -590,13 +587,8 @@ async function main() {
     check(!isError(updated), "membership removal update must succeed");
     check(
       Boolean(
-        await prisma.projectPrivateFolder.findUnique({
-          where: {
-            projectId_ownerUserId: {
-              projectId,
-              ownerUserId: users.collaborator.id,
-            },
-          },
+        await prisma.projectPrivateFolder.findFirst({
+          where: { projectId, ownerUserId: users.collaborator.id, parentFolderId: null },
         }),
       ),
       "member removal must preserve the historical private folder",

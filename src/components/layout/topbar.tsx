@@ -128,7 +128,7 @@ export function Topbar({
               >
                 <UserAvatar user={user} />
                 <div className="hidden min-w-0 flex-1 text-left xl:block">
-                  <p className="truncate text-[13px] font-extrabold leading-tight text-[#18211a]">
+                  <p className="min-w-0 whitespace-normal break-words text-[13px] font-extrabold leading-tight text-[#18211a]">
                     {user.name}
                   </p>
                 </div>
@@ -138,7 +138,7 @@ export function Topbar({
             <DropdownMenuContent align="end" className="w-[260px]">
               <DropdownMenuLabel>Account</DropdownMenuLabel>
               <div className="px-3 pb-2">
-                <p className="truncate text-[15px] font-semibold text-[#18211a]">
+                <p className="min-w-0 whitespace-normal break-words text-[15px] font-semibold text-[#18211a]">
                   {user.name}
                 </p>
                 <p className="truncate text-[13px] text-muted">{user.email}</p>

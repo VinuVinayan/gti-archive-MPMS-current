@@ -41,6 +41,7 @@ export function ProductionApprovalWorkspace({
             decision,
             comment,
             confirmed: true,
+            requestVersion: data.requestVersion ?? undefined,
           })
         : await fetch(`/api/external/production-approval/${encodeURIComponent(access.token)}/decision`, {
             method: "POST",
@@ -89,7 +90,7 @@ export function ProductionApprovalWorkspace({
       <ConfirmationDialog
         isOpen={decisionToConfirm !== null}
         title={decisionToConfirm === "APPROVE" ? "Approve production files?" : "Reject production files?"}
-        description={decisionToConfirm === "APPROVE" ? "This records your approval and activates the next approver in the chain." : "This records your rejection and stops the approval chain."}
+        description={decisionToConfirm === "APPROVE" ? "This records your approval. The next request must be sent manually." : "This records your rejection and stops the approval chain."}
         confirmLabel={decisionToConfirm === "APPROVE" ? "Confirm Approval" : "Confirm Rejection"}
         tone={decisionToConfirm === "REJECT" ? "destructive" : "default"}
         pending={pending}
