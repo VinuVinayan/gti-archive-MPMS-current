@@ -1,4 +1,7 @@
 import { Prisma, PrismaClient } from "@prisma/client";
+import { assertDemoModeDatabase } from "./demo-mode";
+
+assertDemoModeDatabase();
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;

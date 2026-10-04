@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "password": "FluxDemo-Only!2026",
+  "users": [
+    {
+      "id": "demo-super-admin",
+      "name": "Demo Super Admin",
+      "email": "super-admin@flux-demo.test",
+      "role": "SUPER_ADMIN"
+    },
+    {
+      "id": "demo-director",
+      "name": "Demo Director",
+      "email": "director@flux-demo.test",
+      "role": "USER"
+    },
+    {
+      "id": "demo-owner",
+      "name": "Demo Project Owner",
+      "email": "owner@flux-demo.test",
+      "role": "USER"
+    },
+    {
+      "id": "demo-co-owner",
+      "name": "Demo Co-owner",
+      "email": "co-owner@flux-demo.test",
+      "role": "ADMIN"
+    },
+    {
+      "id": "demo-executor",
+      "name": "Demo Executor",
+      "email": "executor@flux-demo.test",
+      "role": "USER"
+    },
+    {
+      "id": "demo-collaborator",
+      "name": "Demo Collaborator",
+      "email": "collaborator@flux-demo.test",
+      "role": "USER"
+    }
+  ]
+}

@@ -1,4 +1,30 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GTI Flux MPMS
+
+## Local Demo / QA
+
+With PostgreSQL tools and the pinned pnpm 10.34.6 installed:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm demo
+```
+
+Open **http://127.0.0.1:3101/sign-in**. Demo Mode owns a separate persistent local database, preserves QA changes between launches, and disables external services. No production configuration is changed.
+
+All accounts use the public fake password **`FluxDemo-Only!2026`**:
+
+| Account | Fake email |
+| --- | --- |
+| Super Admin | `super-admin@flux-demo.test` |
+| Director | `director@flux-demo.test` |
+| Project Owner | `owner@flux-demo.test` |
+| Co-owner | `co-owner@flux-demo.test` |
+| Executor | `executor@flux-demo.test` |
+| Collaborator | `collaborator@flux-demo.test` |
+
+Stop the app with Ctrl+C, then run **`pnpm demo:reset`** to restore only the demo database. See [Demo setup, scenarios and safety](docs/DEMO.md) for PostgreSQL installation, role details, additional commands and limitations. Automated synthetic tests remain separate.
+
+The application uses [Next.js](https://nextjs.org).
 
 ## Getting Started
 

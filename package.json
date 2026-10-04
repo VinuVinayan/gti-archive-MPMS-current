@@ -78,7 +78,14 @@
     "prisma:generate": "prisma generate",
     "prisma:client-check": "node scripts/prisma-client-regression-checks.mjs",
     "prisma:push": "prisma db push",
-    "users:create": "node scripts/create-user.mjs"
+    "users:create": "node scripts/create-user.mjs",
+    "demo": "node scripts/demo/run.mjs",
+    "demo:setup": "node scripts/demo/run.mjs setup",
+    "demo:reset": "node scripts/demo/run.mjs reset",
+    "demo:stop": "node scripts/demo/run.mjs stop",
+    "demo:credentials": "node scripts/demo/run.mjs credentials",
+    "demo:verify": "node scripts/demo/run.mjs verify",
+    "demo:safety-check": "node --test scripts/demo/safety.test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1053.0",
