@@ -57,8 +57,8 @@ expectNavigation("/projects/project-1/edit", {
 expectNavigation("/projects/flexible/flexible-project-1", {
   owner: "topbar",
   href: "/projects?view=flexible",
-  label: "Flexible Projects",
-  ariaLabel: "Back to Flexible Projects",
+  label: "Private Projects",
+  ariaLabel: "Back to Private Projects",
 });
 expectNavigation("/projects/flexible/flexible-project-1", {
   owner: "topbar",

@@ -172,9 +172,11 @@ for (const forbidden of [
   assert.ok(!browser.includes(forbidden), `USER Projects UI leaked: ${forbidden}`);
 }
 
-assert.match(browser, /Artwork Projects/);
-assert.match(browser, /Flexible Projects/);
-assert.match(browser, /href="\/projects\?view=flexible"/);
+const typeSwitcher = read("src/components/projects/project-type-switcher.tsx");
+assert.match(browser, /<ProjectTypeSwitcher/);
+assert.match(typeSwitcher, /Collaborative Projects/);
+assert.match(typeSwitcher, /Private Projects/);
+assert.match(typeSwitcher, /privateHref = "\/projects\?view=flexible"/);
 assert.match(browser, /showProjectTypeSwitcher \? \(/);
 assert.match(flexibleRoute, /showProjectTypeSwitcher \? \(/);
 assert.match(page, /getProjectTypeSwitcherVisibility\(user\)/);

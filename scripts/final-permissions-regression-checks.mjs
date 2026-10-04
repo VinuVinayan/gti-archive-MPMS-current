@@ -109,7 +109,7 @@ includes(
   "dashboard UI must hide the denied Recent Projects panel",
 );
 
-for (const stageNumber of [1, 2, 5, 6, 7]) {
+for (const stageNumber of [1, 2, 5, 6]) {
   const page = read(
     `src/app/(dashboard)/projects/[slug]/stages/${stageNumber}/page.tsx`,
   );
@@ -188,3 +188,6 @@ includes(
 );
 
 console.log("Final ADMIN/USER cross-layer permission regression checks passed.");
+
+includes(read("src/app/(dashboard)/projects/[slug]/stages/7/page.tsx"), "getStageSevenWorkspaceData", "Stage 7 must use its scoped service authorization");
+includes(read("src/lib/stage-seven.ts"), "getAuthorizedStageSevenProject", "Stage 7 data must enforce project authorization");

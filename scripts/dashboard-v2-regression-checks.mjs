@@ -50,7 +50,7 @@ for (const panel of [
   "Upcoming Deadlines",
   "Projects by Stage",
   "My Work",
-  "Flexible Projects",
+  "Private Projects",
   "Recent Projects",
 ]) {
   assert(workspace.includes(panel), `Dashboard panel is missing: ${panel}`);
@@ -164,7 +164,7 @@ assert(
     workspace.includes('href="/projects?view=flexible"') &&
     workspace.includes("project.progress") &&
     workspace.includes("project.deadlineLabel"),
-  "The Flexible Projects panel must be permission-bounded and expose milestone progress and deadlines.",
+  "The Private Projects panel must be permission-bounded and expose milestone progress and deadlines.",
 );
 
 assert(

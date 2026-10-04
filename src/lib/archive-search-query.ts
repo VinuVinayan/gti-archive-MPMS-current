@@ -265,7 +265,7 @@ function isArchiveSearchStopWord(term: string) {
 }
 
 function extractArchiveSearchFileSize(query: string) {
-  const match = query.match(/\b(\d+(?:\.\d+)?)\s*(bytes?|b|kb|mb|gb)\b/i);
+  const match = query.match(/(?<![\w-])(\d+(?:\.\d+)?)\s*(bytes?|b|kb|mb|gb)(?![\w-])/i);
   if (!match) return { fileSize: null, matchedText: "" };
 
   const amount = Number(match[1]);

@@ -464,6 +464,11 @@ async function main() {
       "a resolved Stage 5 checklist item must stop its reminders",
     );
 
+    await markPhysicalSampleRoundReceived(recipient, {
+      projectId: ids.project,
+      productionUnitId: ids.unitB,
+      sampleRoundId: stageSevenInternal.id,
+    });
     await decidePhysicalSampleRound(recipient, {
       projectId: ids.project,
       productionUnitId: ids.unitB,

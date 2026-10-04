@@ -244,3 +244,9 @@ check(
 );
 
 console.log("Flux AI archive query checks passed.");
+
+check(
+  buildArchiveSearchPlan("FLUX-ART-489dbdcb-e476-4d16-920b-9d3fd3f7a819").fileSize === null,
+  "An artwork identifier containing a numeric UUID segment ending in b must not become a byte-size filter.",
+);
+check(buildArchiveSearchPlan("files 920b").fileSize?.min === 920, "Standalone byte-size queries must remain supported.");

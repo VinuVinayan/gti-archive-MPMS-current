@@ -782,7 +782,7 @@ async function main() {
   });
   check(
     isError(prematureStageThreeCompletion) &&
-      prematureStageThreeCompletion.error.includes("Every Stage 3 concept") &&
+      prematureStageThreeCompletion.error.includes("Every Stage 3 task") &&
       prematureStageThreeCompletion.error.includes(conceptB.name),
     "Stage 3 must not complete while another executor's concept is still awaiting approval",
   );
@@ -1127,7 +1127,7 @@ async function main() {
   });
   check(
     isError(incompleteStageFourCompletion) &&
-      incompleteStageFourCompletion.error.includes("Every Stage 4 concept") &&
+      incompleteStageFourCompletion.error.includes("Every Stage 4 task") &&
       incompleteStageFourCompletion.error.includes(stageFourB.name),
     "Project Owner must not complete Stage 4 while another concept is still In Progress",
   );

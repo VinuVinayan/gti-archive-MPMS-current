@@ -5,7 +5,6 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   readdirSync,
   rmSync,
 } from "node:fs";
@@ -16,12 +15,13 @@ import { join } from "node:path";
 import { PrismaClient } from "@prisma/client";
 
 function readDatabaseUrl() {
-  const line = readFileSync(".env", "utf8")
-    .split(/\r?\n/)
-    .find((entry) => entry.startsWith("DATABASE_URL="));
-  if (!line) throw new Error("DATABASE_URL is missing from .env.");
-  const raw = line.slice("DATABASE_URL=".length).trim();
-  return raw.startsWith('"') && raw.endsWith('"') ? raw.slice(1, -1) : raw;
+  const raw = process.env.DATABASE_URL;
+  if (!raw) throw new Error("Set DATABASE_URL to an isolated local PostgreSQL database.");
+  const url = new URL(raw);
+  if (!["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)) {
+    throw new Error("Isolated integration checks require a localhost database.");
+  }
+  return raw;
 }
 
 function run(command, args, env) {
