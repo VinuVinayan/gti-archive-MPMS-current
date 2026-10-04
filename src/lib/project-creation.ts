@@ -7,7 +7,9 @@ import { ensureProjectPrivateFolderTx } from "./project-private-folders";
 import { getInitialProjectWorkflowStageData } from "./project-workflow";
 import { isBusinessAdministratorRole } from "./user-role-compatibility";
 
-export type CreateProjectV2Input = {
+import { createProjectTemplateSnapshotTx, type TemplateSelection } from "./project-templates";
+
+export type CreateProjectV2Input = TemplateSelection & {
   name: string;
   ownerId: string;
   coOwnerIds: string[];
@@ -21,6 +23,7 @@ export type CreateProjectV2FieldErrors = {
   coOwnerIds?: string;
   executorIds?: string;
   collaboratorIds?: string;
+  templateKey?: string;
 };
 
 export type CreateProjectV2Result =
@@ -215,7 +218,7 @@ export async function createProjectV2(
           },
           workflowStages: {
             createMany: {
-              data: getInitialProjectWorkflowStageData(),
+              data: (input.templateKey ?? "PACKAGING") === "PACKAGING" ? getInitialProjectWorkflowStageData() : [],
             },
           },
         },
@@ -225,7 +228,8 @@ export async function createProjectV2(
         },
       });
 
-      await ensureCanonicalProjectResearchWorkspaceTx(tx, project.id);
+      await createProjectTemplateSnapshotTx(tx, project.id, creator.id, input);
+      if ((input.templateKey ?? "PACKAGING") === "PACKAGING") await ensureCanonicalProjectResearchWorkspaceTx(tx, project.id);
       for (const participantId of participantIds) {
         await ensureProjectPrivateFolderTx(tx, project.id, participantId);
       }
@@ -247,7 +251,7 @@ export async function createProjectV2(
           !coOwnerRecipientIds.includes(userId) &&
           !executorRecipientIds.includes(userId),
       );
-      const notificationUrl = `/projects/${project.id}/stages/1`;
+      const notificationUrl = `/projects/${project.id}`;
       const createdAt = new Date();
 
       if (ownerRecipientIds.length > 0) {

@@ -14,14 +14,14 @@ import { Card } from "@/components/ui/card";
 import { RichTextContent } from "@/components/ui/rich-text-editor";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ProjectStageShellRecord } from "@/lib/projects";
-import { PROJECT_WORKFLOW_STAGE_DEFINITIONS } from "@/lib/project-workflow";
+import { stageInstanceHref, type StageInstanceView } from "@/lib/project-template-definitions";
 
 type ProjectOverviewWorkspaceProps = {
   project: ProjectStageShellRecord;
   currentUserId: string;
 };
 
-type ProjectOverviewStage = (typeof PROJECT_WORKFLOW_STAGE_DEFINITIONS)[number];
+type ProjectOverviewStage = StageInstanceView;
 
 export function ProjectOverviewHeader({ projectName }: { projectName: string }) {
   return (
@@ -44,22 +44,20 @@ export function ProjectSummaryCard({ project }: { project: ProjectStageShellReco
 export function StageOverviewCard({
   stage,
   projectId,
-  workflowStage,
 }: {
   stage: ProjectOverviewStage;
   projectId: string;
-  workflowStage: ProjectStageShellRecord["workflowStages"][number] | null;
 }) {
-  const status = workflowStage?.status ?? "LOCKED";
+  const status = stage.status;
   const available = status === "AVAILABLE";
   const completed = status === "COMPLETED";
   const locked = status === "LOCKED";
   const stageOpenable = !locked;
-  const statusLabel = completed ? "Completed" : available ? "Available" : "Locked";
+  const statusLabel = stage.skippedAt ? "Skipped" : completed ? "Completed" : available ? "Available" : "Locked";
 
   return (
     <article
-      className={`flex min-h-[210px] min-w-0 flex-col rounded-[20px] border p-4 transition sm:p-5 ${
+      className={`flex h-[260px] min-w-0 flex-col rounded-[20px] border p-4 transition sm:p-5 ${
         stageOpenable
           ? "border-[#287750] bg-[linear-gradient(145deg,#0f5b39_0%,#19764c_55%,#378a62_100%)] text-white shadow-[0_18px_42px_rgba(25,103,67,0.2)]"
           : available
@@ -77,7 +75,7 @@ export function StageOverviewCard({
               : "bg-[#e7ece7] text-[#78827b]"
           }`}
         >
-          Stage {stage.number}
+          Stage {stage.order}
         </span>
         <span
           className={`inline-flex items-center gap-1.5 text-[11px] font-[700] ${
@@ -96,7 +94,8 @@ export function StageOverviewCard({
       </div>
 
       <h2
-        className={`mt-4 text-[17px] font-[760] leading-[1.25] tracking-[-0.02em] ${
+        title={stage.name}
+        className={`mt-4 line-clamp-2 min-h-[43px] break-words text-[17px] font-[760] leading-[1.25] tracking-[-0.02em] ${
           stageOpenable ? "text-white" : available ? "text-[#285c40]" : "text-[#6f7972]"
         }`}
       >
@@ -112,9 +111,9 @@ export function StageOverviewCard({
 
       {locked ? (
         <p className="mt-3 text-[11px] font-[650] leading-4 text-[#727d75]">
-          {stage.number === 1
+          {stage.order === 1
             ? "This stage is not available."
-            : `Complete Stage ${stage.number - 1} to unlock Stage ${stage.number}.`}
+            : `Complete Stage ${stage.order - 1} to unlock Stage ${stage.order}.`}
         </p>
       ) : null}
 
@@ -125,7 +124,7 @@ export function StageOverviewCard({
             variant="secondary"
             className="h-10 w-full justify-between rounded-[12px] border-white bg-white px-4 text-[#174f34] shadow-[0_8px_20px_rgba(0,0,0,0.1)] hover:bg-[#f5fbf6]"
           >
-            <Link href={`/projects/${projectId}/stages/${stage.number}`}>
+            <Link href={stageInstanceHref(projectId, stage)}>
               Open Stage
               <ArrowRight className="h-4 w-4" />
             </Link>
@@ -161,22 +160,13 @@ export function ProjectStageGrid({
           Project stages
         </h2>
         <p className="mt-1 text-[13px] leading-5 text-[#707a73]">
-          Begin with Project Inquiry. Later stages will become available as the workflow progresses.
+          Stages become available in order as the project progresses.
         </p>
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-        {PROJECT_WORKFLOW_STAGE_DEFINITIONS.map((stage) => (
-          <StageOverviewCard
-            key={stage.key}
-            stage={stage}
-            projectId={project.id}
-            workflowStage={
-              project.workflowStages.find(
-                (workflowStage) => workflowStage.stageKey === stage.key,
-              ) ?? null
-            }
-          />
+        {(project.stageInstances ?? []).map((stage) => (
+          <StageOverviewCard key={stage.id} stage={stage} projectId={project.id} />
         ))}
       </div>
     </section>
@@ -192,7 +182,13 @@ export function ProjectOverviewWorkspace({
       <ProjectAccessRealtimeGuard projectId={project.id} currentUserId={currentUserId} />
       <ProjectOverviewHeader projectName={project.title} />
       <ProjectSummaryCard project={project} />
-      <ProjectStageGrid project={project} />
+      <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-[#68736b]">
+        <span>{project.templateName || "Legacy project"}</span>
+        {project.templateKey === "CUSTOM" && <Link className="font-semibold text-[#226742] underline" href={`/projects/${project.id}/structure`}>Stage structure &amp; approval</Link>}
+        <Link className="text-[#226742] underline" href={`/projects/${project.id}/structure/history`}>Stage history</Link>
+      </div>
+      {project.structureApproval === "DRAFT" && <p className="mt-3 rounded-xl bg-amber-50 p-4 text-sm">Director approval is required before this Custom project can begin.</p>}
+      {project.stageInstances?.length ? <ProjectStageGrid project={project} /> : <p className="mt-5 text-sm">This legacy project has no initialized template workflow. Its existing records have been preserved.</p>}
     </section>
   );
 }
@@ -222,7 +218,7 @@ export function ProjectOverviewLoadingShell() {
         <Skeleton className="mt-2 h-3.5 w-full max-w-[560px] rounded-full" />
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {Array.from({ length: 7 }).map((_, index) => (
-            <Skeleton key={index} className="min-h-[210px] rounded-[20px]" />
+            <Skeleton key={index} className="h-[260px] rounded-[20px]" />
           ))}
         </div>
       </div>

@@ -11,6 +11,8 @@ import {
 } from "@/lib/permissions/resolver";
 import { getEligibleProjectOwnerCandidates } from "@/lib/project-owner-candidates";
 
+import { listProjectTemplates } from "@/lib/project-templates";
+
 export default async function NewProjectPage() {
   const user = await requireUser();
 
@@ -22,15 +24,17 @@ export default async function NewProjectPage() {
     redirect("/projects");
   }
 
-  const [collaborators, eligibleOwnerCandidates] = await Promise.all([
+  const [collaborators, eligibleOwnerCandidates, templates] = await Promise.all([
     getCollaborators(),
     getEligibleProjectOwnerCandidates(),
+    listProjectTemplates(),
   ]);
   const displayName = getUserDisplayName(user);
 
   return (
     <DashboardLayout>
       <CreateProjectForm
+        templates={templates}
         currentUser={{
           id: user.id,
           name: displayName,

@@ -1,3 +1,5 @@
+import { canManageProjectStages } from "@/lib/project-templates";
+import { getProjectStageAccessRecordById } from "@/lib/project-stage-data";
 import { Suspense } from "react";
 import { UserRole } from "@prisma/client";
 import { redirect } from "next/navigation";
@@ -102,7 +104,8 @@ export default async function ProjectDetailPage({
     redirect("/no-access");
   }
 
-  if (user.role === UserRole.USER) {
+  const accessRecord = await getProjectStageAccessRecordById(slug);
+  if (user.role === UserRole.USER && (!accessRecord || !canManageProjectStages(user, accessRecord))) {
     return (
       <DashboardLayout
         topbarProps={{

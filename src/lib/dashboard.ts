@@ -170,6 +170,7 @@ const projectSelect = {
       canAccessProjectArchives: true,
     },
   },
+  stageInstances: { where: { retiredAt: null }, orderBy: { order: "asc" }, select: { order: true, name: true, status: true } },
   workflowStages: {
     select: {
       stageKey: true,

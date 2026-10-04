@@ -41,6 +41,8 @@ export type ProjectListWorkflowState = {
 };
 
 type ProjectListWorkflowInput = {
+  structureApproval?: string;
+  stageInstances?: Array<{ id?: string; order: number; name: string; status: ProjectWorkflowStageStatus; retiredAt?: Date | null }>;
   id?: string;
   completedAt?: Date | null;
   closure?: { id: string } | null;
@@ -135,11 +137,15 @@ export function buildProjectListStatusWhere(
 
   const completedWhere = buildCompletedWhere();
 
-  if (status === "COMPLETED") return completedWhere;
-  return buildValidActiveWorkflowWhere();
+  const hasSnapshot: Prisma.ProjectWhereInput = { stageInstances: { some: { retiredAt: null } } };
+  const snapshotCompleted: Prisma.ProjectWhereInput = { AND: [hasSnapshot, { stageInstances: { none: { retiredAt: null, status: { not: "COMPLETED" } } } }] };
+  return { OR: [
+    status === "COMPLETED" ? snapshotCompleted : { AND: [hasSnapshot, { NOT: snapshotCompleted }] },
+    { AND: [{ stageInstances: { none: {} } }, status === "COMPLETED" ? completedWhere : buildValidActiveWorkflowWhere()] },
+  ] };
 }
 
-export function buildProjectListStageWhere(
+function buildLegacyProjectListStageWhere(
   stageNumber: number | null,
 ): Prisma.ProjectWhereInput {
   if (!stageNumber) return {};
@@ -193,6 +199,17 @@ export function buildProjectListStageWhere(
 export function deriveProjectListWorkflowState(
   project: ProjectListWorkflowInput,
 ): ProjectListWorkflowState {
+  const instances = project.stageInstances?.filter(stage => !stage.retiredAt).sort((a,b)=>a.order-b.order);
+  if (instances?.length) {
+    const completed = instances.every(stage => stage.status === "COMPLETED");
+    const current = instances.find(stage => stage.status !== "COMPLETED") ?? instances.at(-1)!;
+    return {
+      businessStatus: completed ? "COMPLETED" : "ACTIVE", statusLabel: completed ? "Completed" : "Active",
+      workflowHealth: "VALID", workflowDiagnosticLabel: null,
+      currentStageNumber: current.order, currentStageName: current.name,
+      stageStatuses: instances.map(stage => stage.status),
+    };
+  }
   const stageByKey = new Map(
     project.workflowStages.map((stage) => [stage.stageKey, stage] as const),
   );
@@ -269,4 +286,12 @@ export function deriveProjectListWorkflowState(
     currentStageName: currentStage.name,
     stageStatuses,
   };
+}
+
+export function buildProjectListStageWhere(stageNumber: number | null): Prisma.ProjectWhereInput {
+  if (!stageNumber) return {};
+  return { OR: [
+    { stageInstances: { some: { order: stageNumber, retiredAt: null, status: "AVAILABLE" } } },
+    { AND: [{ stageInstances: { none: {} } }, buildLegacyProjectListStageWhere(stageNumber)] },
+  ] };
 }

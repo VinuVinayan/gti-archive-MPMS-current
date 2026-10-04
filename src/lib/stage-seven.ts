@@ -1593,6 +1593,11 @@ export async function closeStageSevenProject(
         workflowStage.stageKey ===
         ProjectWorkflowStageKey.IMPLEMENTATION_AND_SUPERVISION,
     );
+    const instance = await tx.projectStageInstance.findFirst({ where: { projectId: input.projectId, workspace: "PACKAGING_ACCEPTANCE", retiredAt: null } });
+    const followingStage = instance ? await tx.projectStageInstance.findFirst({ where: { projectId: input.projectId, order: { gt: instance.order }, retiredAt: null }, orderBy: { order: "asc" } }) : null;
+    if (followingStage && stage?.status === ProjectWorkflowStageStatus.COMPLETED) {
+      return { duplicate: true, closedAt: stage.completedAt!.toISOString() } as const;
+    }
     if (
       !stage ||
       getWorkflowStageCompletionMode(
@@ -1627,14 +1632,14 @@ export async function closeStageSevenProject(
       );
     }
     const now = new Date();
-    const closure = await tx.projectClosure.create({
+    if (!followingStage) await tx.projectClosure.create({
       data: { projectId: input.projectId, closedById: user.id, closedAt: now },
     });
     await tx.projectWorkflowStage.update({
       where: { id: stage.id },
       data: { status: ProjectWorkflowStageStatus.COMPLETED, completedAt: now },
     });
-    await tx.project.update({
+    if (!followingStage) await tx.project.update({
       where: { id: input.projectId },
       data: { completedAt: now },
     });
@@ -1643,7 +1648,7 @@ export async function closeStageSevenProject(
       stage: "SEVEN",
       now,
     });
-    return { duplicate: false, closedAt: closure.closedAt.toISOString() } as const;
+    return { duplicate: false, closedAt: now.toISOString() } as const;
   });
 }
 

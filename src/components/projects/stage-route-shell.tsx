@@ -1,3 +1,6 @@
+import Link from "next/link";
+import { StageGuidance } from "./stage-guidance";
+import { stageInstanceHref } from "@/lib/project-template-definitions";
 import type { ReactNode } from "react";
 
 import { ProjectAccessRealtimeGuard } from "@/components/projects/project-access-realtime-guard";
@@ -20,6 +23,7 @@ export function StageRouteShell({
   description?: string;
   icon: ReactNode;
 }) {
+  const activeStage = project.stageInstances?.find(stage => title.startsWith(`Stage ${stage.order} -`) || eyebrow.startsWith(`Stage ${stage.order} -`) || stage.name === eyebrow);
   return (
     <div>
       <ProjectAccessRealtimeGuard
@@ -41,6 +45,8 @@ export function StageRouteShell({
         ) : null}
       </header>
       <ProjectFlowSummaryStrip project={project} className="mt-5" />
+      {project.canManageStages && <nav aria-label="Project stages" className="mt-4 flex flex-wrap gap-2">{project.stageInstances?.map(stage => stage.status === "LOCKED" ? <span key={stage.id} className="max-w-60 rounded-lg border p-2 text-xs text-gray-400">{stage.order}. {stage.name}</span> : <Link key={stage.id} className="max-w-60 rounded-lg border p-2 text-xs text-[#226742]" href={stageInstanceHref(project.id, stage)}>{stage.order}. {stage.name}</Link>)}</nav>}
+      {activeStage && <StageGuidance stage={activeStage} />}
     </div>
   );
 }

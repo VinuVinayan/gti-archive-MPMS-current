@@ -317,6 +317,11 @@ export function hasProjectPermission(
   project: ProjectPermissionContext,
   permissionKey: PermissionKey,
 ) {
+  // Ownership carries stage-management authority even for explicitly authorized
+  // USER project creators. Executor membership alone never grants these rights.
+  if ((isProjectOwner(user, project) || isProjectCoOwner(user, project)) && isProjectOwnerManagePermission(permissionKey)) {
+    return true;
+  }
   if (!hasProjectPermissionGrant(user, permissionKey)) {
     return false;
   }

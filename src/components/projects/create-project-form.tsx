@@ -24,7 +24,12 @@ import type { CollaboratorRecord } from "@/lib/collaboration";
 import type { ProjectOwnerCandidate } from "@/lib/project-owner-candidates";
 import { showErrorToast, showSuccessToast, showWarningToast } from "@/lib/toast";
 
+import { StageDefinitionBuilder } from "./stage-definition-builder";
+import { newStageDefinition, type StageDefinitionInput, type TemplateKey } from "@/lib/project-template-definitions";
+import type { ProjectTemplateOption } from "@/lib/project-templates";
+
 type CreateProjectFormProps = {
+  templates?: ProjectTemplateOption[];
   currentUser: ProjectUserOption;
   eligibleOwnerCandidates: ProjectOwnerCandidate[];
   availableCollaborators: CollaboratorRecord[];
@@ -83,6 +88,7 @@ function upsertCollaborator(
 
 export function CreateProjectForm({
   currentUser,
+  templates = [],
   eligibleOwnerCandidates,
   availableCollaborators,
   canInviteCollaborator,
@@ -90,6 +96,9 @@ export function CreateProjectForm({
   initialProject,
 }: CreateProjectFormProps) {
   const router = useRouter();
+  const [templateKey, setTemplateKey] = useState<TemplateKey | "">("");
+  const [customStages, setCustomStages] = useState<StageDefinitionInput[]>([newStageDefinition("Brief")]);
+  const selectedTemplate = templates.find(template => template.key === templateKey);
   const [isCreating, startCreating] = useTransition();
   const editingProjectId = mode === "edit" ? initialProject?.id : undefined;
   const isEditing = Boolean(editingProjectId);
@@ -228,6 +237,7 @@ export function CreateProjectForm({
       return;
     }
 
+    if (!isEditing && !selectedTemplate) { showErrorToast("Choose a Project Type / Template."); return; }
     const nextErrors: FormErrors = {};
 
     if (!projectName.trim()) {
@@ -247,6 +257,9 @@ export function CreateProjectForm({
 
     startCreating(async () => {
       const input = {
+        templateKey: templateKey || undefined,
+        templateVersionId: selectedTemplate?.version.id,
+        customStages: templateKey === "CUSTOM" ? customStages : undefined,
         name: projectName,
         ownerId,
         coOwnerIds,
@@ -301,6 +314,20 @@ export function CreateProjectForm({
       </h1>
 
       <form onSubmit={handleSubmit} noValidate className="mt-7 sm:mt-8">
+        {!isEditing && <section className="mb-6 rounded-[22px] border border-[#d9e0d9] bg-white p-6">
+          <label htmlFor="project-template" className="text-sm font-bold">Project Type / Template *</label>
+          <select id="project-template" required value={templateKey} onChange={e=>setTemplateKey(e.target.value as TemplateKey)} className="mt-2 block w-full rounded-xl border p-3">
+            <option value="">Choose a template</option>
+            {templates.map(template=><option key={template.key} value={template.key}>{template.name}</option>)}
+          </select>
+          {selectedTemplate && <div className="mt-5">
+            <p className="mb-3 text-sm text-[#68736b]">{selectedTemplate.name} · Version {selectedTemplate.version.version}. This project keeps its own stage configuration.</p>
+            {templateKey === "CUSTOM" ? <>
+              <p className="mb-4 text-sm">Define your stages. Director approval is required before work begins.</p>
+              <StageDefinitionBuilder stages={customStages} onChange={setCustomStages} disabled={isCreating} />
+            </> : <ol className="grid gap-2 sm:grid-cols-2">{selectedTemplate.version.stages.map(stage=><li key={stage.id} className="rounded-lg bg-[#f3f7f3] p-3 text-sm"><span className="mr-2 font-bold">{stage.order}.</span>{stage.name}</li>)}</ol>}
+          </div>}
+        </section>}
         <div className="rounded-[22px] border border-[#d9e0d9] bg-white px-5 py-6 shadow-[0_12px_34px_rgba(20,36,25,0.035)] sm:px-8 sm:py-8 lg:px-10">
           <div className="grid gap-x-8 gap-y-6 md:grid-cols-[190px_minmax(0,1fr)] md:items-start md:gap-y-7">
             <label htmlFor="project-name" className="pt-0 text-[14px] font-[700] text-[#18211b] md:pt-[16px]">

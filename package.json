@@ -74,6 +74,7 @@
     "stage-two:import-check": "node scripts/project-research-import-error-checks.mjs && tsc --project scripts/tsconfig.project-research-import.json && COMPILED_ALIAS_ROOT=.tmp/project-research-import node -r ./scripts/register-compiled-alias.cjs .tmp/project-research-import/scripts/project-research-import-check.js",
     "stage-two:integration-check": "tsc --project scripts/tsconfig.project-research-integration.json && COMPILED_ALIAS_ROOT=.tmp/project-research-integration node -r ./scripts/register-compiled-alias.cjs .tmp/project-research-integration/scripts/project-research-integration-check.js",
     "permissions:sync": "tsc --project scripts/tsconfig.permissions-sync.json && node .tmp/permissions-sync/scripts/sync-permissions.js",
+    "templates:integration-check": "tsc --project scripts/tsconfig.project-template-engine.json && node scripts/run-project-template-engine-isolated.mjs",
     "prisma:generate": "prisma generate",
     "prisma:client-check": "node scripts/prisma-client-regression-checks.mjs",
     "prisma:push": "prisma db push",

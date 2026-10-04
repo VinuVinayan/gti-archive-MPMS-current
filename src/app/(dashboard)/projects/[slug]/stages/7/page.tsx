@@ -1,3 +1,4 @@
+import { requirePackagingStageRoute } from "@/lib/project-template-route-access";
 import { Suspense } from "react";
 import { ProjectWorkflowStageKey } from "@prisma/client";
 
@@ -48,6 +49,7 @@ async function StageSevenContent({
   selectedRoundId?: string;
 }) {
   const user = await userPromise;
+  await requirePackagingStageRoute(slug, user, 7);
 
   const project = await getProjectStageShellById(slug, user);
 

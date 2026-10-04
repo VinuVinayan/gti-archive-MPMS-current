@@ -445,6 +445,7 @@ model User {
   passwordHash                        String
   passwordChangedAt                   DateTime?
   role                                UserRole                             @default(USER)
+  templateManagementAccessGranted     Boolean                              @default(false)
   projectCreationAccessGranted        Boolean                              @default(false)
   inviteToken                         String?                              @unique
   inviteExpiresAt                     DateTime?
@@ -666,6 +667,17 @@ model Project {
   archiveArtworkMetadata ArchiveArtworkMetadata[]
   completionWorkflow     ProjectCompletionWorkflow?
   completionDocuments    ProjectCompletionDocument[]
+  templateVersionId      String?
+  templateVersion        ProjectTemplateVersion?        @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
+  templateKey            String?
+  templateName           String?
+  structureRevision      Int                            @default(1)
+  structureApproval      String                         @default("NOT_REQUIRED")
+  structureApprovedById  String?
+  structureApprovedAt    DateTime?
+  workflowStartedAt      DateTime?
+  stageInstances         ProjectStageInstance[]
+  structureEvents        ProjectStructureEvent[]
   workflowStages         ProjectWorkflowStage[]
   inquiry                ProjectInquiry?
   researchWorkspaces     ProjectResearchWorkspace[]
@@ -701,7 +713,7 @@ model FlexibleProject {
   collaborators FlexibleProjectCollaborator[]
   milestones    FlexibleMilestone[]
   attachments   FlexibleProjectAttachment[]
-  trackerRows   ProjectTrackerRow[]            @relation("ProjectTrackerFlexibleProject")
+  trackerRows   ProjectTrackerRow[]           @relation("ProjectTrackerFlexibleProject")
   completedAt   DateTime?
   createdAt     DateTime                      @default(now())
   updatedAt     DateTime                      @updatedAt
@@ -851,17 +863,17 @@ model ProjectTrackerRow {
 }
 
 model ProjectTrackerCell {
-  id                String               @id @default(cuid())
-  rowId             String
-  row               ProjectTrackerRow    @relation(fields: [rowId], references: [id], onDelete: Cascade)
-  columnId          String
-  column            ProjectTrackerColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
-  value             Json?
-  isLocalOverride   Boolean              @default(false)
-  lastSyncedValue   Json?
-  lastSyncedAt      DateTime?
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
+  id              String               @id @default(cuid())
+  rowId           String
+  row             ProjectTrackerRow    @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  columnId        String
+  column          ProjectTrackerColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  value           Json?
+  isLocalOverride Boolean              @default(false)
+  lastSyncedValue Json?
+  lastSyncedAt    DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
 
   @@unique([rowId, columnId])
   @@index([columnId])
@@ -936,7 +948,7 @@ model ProjectWorkflowStage {
 }
 
 model ContactDirectoryEntry {
-  id             String                @id @default(cuid())
+  id             String                   @id @default(cuid())
   entityType     ProjectContactEntityType @default(PERSON)
   name           String
   company        String?
@@ -947,10 +959,10 @@ model ContactDirectoryEntry {
   email          String?
   phone          String?
   createdById    String
-  createdBy      User                  @relation("ContactDirectoryEntryCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdBy      User                     @relation("ContactDirectoryEntryCreator", fields: [createdById], references: [id], onDelete: Restrict)
   inquiryParties ProjectInquiryParty[]
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
 
   @@index([name])
   @@index([email])
@@ -979,27 +991,27 @@ model ProjectInquiry {
 }
 
 model ProjectInquiryParty {
-  id               String                    @id @default(cuid())
-  inquiryId        String
-  inquiry          ProjectInquiry            @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
-  role             ProjectInquiryPartyRole
-  source           ProjectInquiryPartySource
-  userId           String?
-  user             User?                     @relation("ProjectInquiryPartyUser", fields: [userId], references: [id], onDelete: Restrict)
-  contactId        String?
-  contact          ContactDirectoryEntry?    @relation(fields: [contactId], references: [id], onDelete: Restrict)
-  snapshotName     String
-  snapshotEntityType ProjectContactEntityType @default(PERSON)
-  snapshotCompany  String?
-  snapshotCompanyEmail String?
-  snapshotCompanyPhone String?
+  id                     String                    @id @default(cuid())
+  inquiryId              String
+  inquiry                ProjectInquiry            @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  role                   ProjectInquiryPartyRole
+  source                 ProjectInquiryPartySource
+  userId                 String?
+  user                   User?                     @relation("ProjectInquiryPartyUser", fields: [userId], references: [id], onDelete: Restrict)
+  contactId              String?
+  contact                ContactDirectoryEntry?    @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  snapshotName           String
+  snapshotEntityType     ProjectContactEntityType  @default(PERSON)
+  snapshotCompany        String?
+  snapshotCompanyEmail   String?
+  snapshotCompanyPhone   String?
   snapshotCompanyWebsite String?
-  snapshotPosition String?
-  snapshotEmail    String?
-  snapshotPhone    String?
-  sequence         Int                       @default(0)
-  createdAt        DateTime                  @default(now())
-  updatedAt        DateTime                  @updatedAt
+  snapshotPosition       String?
+  snapshotEmail          String?
+  snapshotPhone          String?
+  sequence               Int                       @default(0)
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
 
   @@index([inquiryId, role, sequence])
   @@index([userId])
@@ -1065,8 +1077,8 @@ model ProjectResearchFolder {
   name           String
   normalizedName String
   parentFolderId String?
-  parentFolder   ProjectResearchFolder? @relation("ResearchFolderChildren", fields: [workspaceId, parentFolderId], references: [workspaceId, id], onDelete: NoAction, onUpdate: NoAction)
-  children       ProjectResearchFolder[] @relation("ResearchFolderChildren")
+  parentFolder   ProjectResearchFolder?          @relation("ResearchFolderChildren", fields: [workspaceId, parentFolderId], references: [workspaceId, id], onDelete: NoAction, onUpdate: NoAction)
+  children       ProjectResearchFolder[]         @relation("ResearchFolderChildren")
   pinnedAt       DateTime?
   colorLabel     ProjectItemColor?
   systemKey      ProjectResearchFolderSystemKey?
@@ -1086,17 +1098,17 @@ model ProjectResearchFolder {
 }
 
 model ProjectResearchFolderFile {
-  id           String                @id @default(cuid())
-  folderId     String
-  folder       ProjectResearchFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
-  attachmentId String                @unique
+  id               String                @id @default(cuid())
+  folderId         String
+  folder           ProjectResearchFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  attachmentId     String                @unique
   inquiryImportKey String?
-  pinnedAt     DateTime?
-  colorLabel   ProjectItemColor?
-  attachment   ProjectAttachment     @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
-  addedById    String
-  addedBy      User                  @relation("ProjectResearchFolderFileAdder", fields: [addedById], references: [id], onDelete: Restrict)
-  createdAt    DateTime              @default(now())
+  pinnedAt         DateTime?
+  colorLabel       ProjectItemColor?
+  attachment       ProjectAttachment     @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+  addedById        String
+  addedBy          User                  @relation("ProjectResearchFolderFileAdder", fields: [addedById], references: [id], onDelete: Restrict)
+  createdAt        DateTime              @default(now())
 
   @@unique([folderId, attachmentId])
   @@unique([folderId, inquiryImportKey])
@@ -1105,21 +1117,21 @@ model ProjectResearchFolderFile {
 }
 
 model ProjectPrivateFolder {
-  id          String              @id @default(cuid())
-  projectId   String
-  project     Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  ownerUserId String
-  owner       User                @relation("ProjectPrivateFolderOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
-  name        String              @default("My Private Folder")
-  normalizedName String           @default("my private folder")
+  id             String                 @id @default(cuid())
+  projectId      String
+  project        Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  ownerUserId    String
+  owner          User                   @relation("ProjectPrivateFolderOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  name           String                 @default("My Private Folder")
+  normalizedName String                 @default("my private folder")
   parentFolderId String?
-  parentFolder ProjectPrivateFolder? @relation("PrivateFolderChildren", fields: [projectId, ownerUserId, parentFolderId], references: [projectId, ownerUserId, id], onDelete: NoAction, onUpdate: NoAction)
-  children    ProjectPrivateFolder[] @relation("PrivateFolderChildren")
-  pinnedAt    DateTime?
-  colorLabel  ProjectItemColor?
-  files       ProjectAttachment[]
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+  parentFolder   ProjectPrivateFolder?  @relation("PrivateFolderChildren", fields: [projectId, ownerUserId, parentFolderId], references: [projectId, ownerUserId, id], onDelete: NoAction, onUpdate: NoAction)
+  children       ProjectPrivateFolder[] @relation("PrivateFolderChildren")
+  pinnedAt       DateTime?
+  colorLabel     ProjectItemColor?
+  files          ProjectAttachment[]
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
 
   @@unique([projectId, ownerUserId, id])
   @@unique([parentFolderId, normalizedName])
@@ -2504,4 +2516,99 @@ model CalendarEvent {
   @@index([startAt])
   @@index([endAt])
   @@index([createdById])
+}
+
+// Published versions and definitions are immutable; edits publish a new version.
+model ProjectTemplate {
+  id             String                   @id
+  key            String                   @unique
+  name           String
+  currentVersion Int                      @default(1)
+  isActive       Boolean                  @default(true)
+  versions       ProjectTemplateVersion[]
+}
+
+model ProjectTemplateVersion {
+  id           String                    @id @default(cuid())
+  templateId   String
+  template     ProjectTemplate           @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  version      Int
+  name         String
+  createdById  String?
+  changeReason String
+  createdAt    DateTime                  @default(now())
+  stages       TemplateStageDefinition[]
+  projects     Project[]
+
+  @@unique([templateId, version])
+}
+
+model TemplateStageDefinition {
+  id               String                   @id @default(cuid())
+  versionId        String
+  version          ProjectTemplateVersion   @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  order            Int
+  name             String
+  stageType        String
+  workspace        String                   @default("GENERAL")
+  legacyStageKey   ProjectWorkflowStageKey?
+  description      String                   @default("")
+  goal             String                   @default("")
+  guidance         String                   @default("")
+  definitionOfDone String                   @default("")
+  required         Boolean                  @default(true)
+  skippable        Boolean                  @default(false)
+  configuration    Json                     @default("{}")
+  instances        ProjectStageInstance[]
+
+  @@unique([versionId, order])
+}
+
+// Stable IDs are the future Tasker stage target. Item-specific task references
+// can point to fields, checklists, folders, production units and samples separately.
+model ProjectStageInstance {
+  id                 String                     @id @default(cuid())
+  projectId          String
+  project            Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceDefinitionId String?
+  sourceDefinition   TemplateStageDefinition?   @relation(fields: [sourceDefinitionId], references: [id], onDelete: Restrict)
+  order              Int
+  name               String
+  stageType          String
+  workspace          String                     @default("GENERAL")
+  legacyStageKey     ProjectWorkflowStageKey?
+  description        String                     @default("")
+  goal               String                     @default("")
+  guidance           String                     @default("")
+  definitionOfDone   String                     @default("")
+  required           Boolean                    @default(true)
+  skippable          Boolean                    @default(false)
+  configuration      Json                       @default("{}")
+  status             ProjectWorkflowStageStatus @default(LOCKED)
+  unlockedAt         DateTime?
+  completedAt        DateTime?
+  skippedAt          DateTime?
+  content            String                     @default("")
+  revision           Int                        @default(1)
+  retiredAt          DateTime?
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+
+  @@unique([projectId, order])
+  @@unique([projectId, legacyStageKey])
+  @@index([projectId, retiredAt, status])
+}
+
+// Append-only application audit; actor IDs survive account deletion.
+model ProjectStructureEvent {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  actorId   String?
+  action    String
+  reason    String
+  details   Json
+  createdAt DateTime @default(now())
+
+  @@index([projectId, createdAt])
 }

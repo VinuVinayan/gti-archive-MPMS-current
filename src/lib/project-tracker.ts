@@ -138,6 +138,7 @@ type StructuredSource = {
   } | null;
   tags: Array<{ tag: { name: string } }>;
   workflowStages: Array<{ status: string }>;
+  stageInstances?: Array<{ status: string }>;
   coOwners: Array<{ userId: string }>;
   executors: Array<{ userId: string; user: { name: string | null; email: string } }>;
   collaborators: Array<{
@@ -317,9 +318,10 @@ export const PROJECT_TRACKER_FIELD_REGISTRY: readonly FieldDefinition[] = [
     aliases: ["progress", "completion", "percent complete", "% complete"],
     description: "High-level completion across stages or milestones.",
     structured: (project) => {
-      const total = project.workflowStages.length;
+      const stages = project.stageInstances?.length ? project.stageInstances : project.workflowStages;
+      const total = stages.length;
       if (!total) return null;
-      const complete = project.workflowStages.filter((stage) => stage.status === "COMPLETED").length;
+      const complete = stages.filter((stage) => stage.status === "COMPLETED").length;
       return Math.round((complete / total) * 100);
     },
     flexible: (project) => {
@@ -480,6 +482,7 @@ const structuredProjectTrackerSelect = {
     select: { tag: { select: { name: true } } },
   },
   workflowStages: { select: { status: true } },
+  stageInstances: { where: { retiredAt: null }, select: { status: true } },
   coOwners: { select: { userId: true } },
   executors: {
     orderBy: { createdAt: "asc" as const },

@@ -13,6 +13,15 @@ const stageParticipantSelect = {
 export const projectStageAccessSelect = {
   id: true,
   name: true,
+  templateVersionId: true,
+  templateName: true,
+  templateKey: true,
+  structureApproval: true,
+  stageInstances: { where: { retiredAt: null }, orderBy: { order: "asc" }, select: {
+    id: true, order: true, name: true, stageType: true, workspace: true,
+    description: true, goal: true, guidance: true, definitionOfDone: true,
+    required: true, skippable: true, status: true, skippedAt: true,
+  } },
   ownerId: true,
   completedAt: true,
   archivedAt: true,

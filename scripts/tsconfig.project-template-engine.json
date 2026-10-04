@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.project-v2-integration.json",
+  "compilerOptions": { "outDir": "../.tmp/project-template-engine" },
+  "include": ["project-template-engine-check.ts"]
+}

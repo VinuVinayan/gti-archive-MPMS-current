@@ -1,6 +1,6 @@
+import { requirePackagingStageRoute } from "@/lib/project-template-route-access";
 import { Suspense } from "react";
 import { ProjectWorkflowStageKey } from "@prisma/client";
-import { redirect } from "next/navigation";
 import { FolderKanban } from "lucide-react";
 
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
@@ -24,9 +24,7 @@ import {
   getProjectStageShellById,
 } from "@/lib/projects";
 import { getProjectResearchPageData } from "@/lib/project-research";
-import { isBusinessAdministratorRole } from "@/lib/user-role-compatibility";
 import { canOpenImplementedWorkflowStage } from "@/lib/workflow-stage-access";
-import { getProjectStageAccessRecordById } from "@/lib/project-stage-data";
 
 type StageTwoPageUser = Awaited<ReturnType<typeof requireUser>>;
 
@@ -54,6 +52,7 @@ async function StageTwoContent({
   userPromise: Promise<StageTwoPageUser>;
 }) {
   const user = await userPromise;
+  await requirePackagingStageRoute(slug, user, 2);
   const project = await getProjectStageShellById(slug, user);
 
   if (!project) {
@@ -135,10 +134,7 @@ export default async function StageTwoPage({
   const { slug } = await params;
   const user = await requireUser();
 
-  if (!isBusinessAdministratorRole(user.role)) {
-    const project = await getProjectStageAccessRecordById(slug);
-    if (project?.ownerId !== user.id && !project?.coOwners.some((record) => record.userId === user.id)) redirect(`/projects/${slug}`);
-  }
+  await requirePackagingStageRoute(slug, user, 2);
 
   const userPromise = Promise.resolve(user);
 

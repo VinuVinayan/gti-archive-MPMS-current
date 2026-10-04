@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { canManageProjectTemplates } from "@/lib/project-templates";
 import { redirect } from "next/navigation";
 
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
@@ -66,8 +68,10 @@ export default async function SettingsPage() {
   const canViewUsers =
     isBusinessAdministratorRole(user.role) && hasPermission(user, "users.view");
 
+  const canManageTemplates = await canManageProjectTemplates(user);
   return (
     <DashboardLayout>
+      {canManageTemplates && <Link className="mb-5 inline-block rounded-xl border bg-white p-4 text-sm font-semibold text-[#226742]" href="/settings/project-templates">Manage project templates &amp; Custom approvals</Link>}
       <SettingsWorkspace
         user={{
           name: getUserDisplayName(user),

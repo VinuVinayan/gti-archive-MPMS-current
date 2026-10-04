@@ -1,3 +1,4 @@
+import { requirePackagingStageRoute } from "@/lib/project-template-route-access";
 import { Suspense } from "react";
 import { ListTodo } from "lucide-react";
 
@@ -59,6 +60,7 @@ async function ConceptStageContent({
   foldersOnly: boolean;
 }) {
   const user = await userPromise;
+  await requirePackagingStageRoute(slug, user, stageNumber);
   const project = await getProjectStageShellById(slug, user);
 
   if (!project) {

@@ -1,3 +1,5 @@
+import { canManageProjectStages } from "./project-templates";
+import type { StageInstanceView } from "./project-template-definitions";
 import { unstable_cache } from "next/cache";
 import { cache } from "react";
 import {
@@ -176,6 +178,7 @@ type ProjectCardProject = Pick<
   | "priority"
 > & {
   owner: Pick<User, "id" | "name" | "email"> | null;
+  stageInstances?: Array<{ order: number; name: string; status: ProjectWorkflowStage["status"] }>;
   closure: { id: string } | null;
   workflowStages: Array<
     Pick<ProjectWorkflowStage, "stageKey" | "status">
@@ -437,7 +440,7 @@ export type ProjectStageShellRecord = Pick<
   | "canViewParticipants"
   | "title"
   | "collaborators"
->;
+> & { stageInstances?: StageInstanceView[]; templateName?: string | null; templateKey?: string | null; structureApproval?: string; canManageStages?: boolean };
 
 export type DashboardProjectCounts = {
   total: number;
@@ -2322,6 +2325,7 @@ export async function getProjectsList(
     closure: {
       select: { id: true },
     },
+    stageInstances: { where: { retiredAt: null }, orderBy: { order: "asc" }, select: { order: true, name: true, status: true } },
     workflowStages: {
       select: {
         stageKey: true,
@@ -2371,7 +2375,8 @@ export async function getProjectsList(
             priority: true,
             updatedAt: true,
             isPinned: true,
-            workflowStages: {
+            stageInstances: { where: { retiredAt: null }, orderBy: { order: "asc" }, select: { order: true, name: true, status: true } },
+    workflowStages: {
               select: {
                 stageKey: true,
                 status: true,
@@ -2692,7 +2697,8 @@ export async function getProjectShellById(
                 },
               },
             },
-            workflowStages: {
+            stageInstances: { where: { retiredAt: null }, orderBy: { order: "asc" }, select: { order: true, name: true, status: true } },
+    workflowStages: {
               orderBy: {
                 createdAt: "asc",
               },
@@ -2820,6 +2826,11 @@ function mapProjectToStageShell(
       !editingLocked &&
       hasProjectPermission(currentUser, project, "project.update"),
     executors,
+    templateName: project.templateName,
+    templateKey: project.templateKey,
+    structureApproval: project.structureApproval,
+    canManageStages: canManageProjectStages(currentUser, project),
+    stageInstances: canManageProjectStages(currentUser, project) ? project.stageInstances.map(stage => ({ ...stage, skippedAt: toProjectIsoString(stage.skippedAt) })) : [],
     workflowStages: project.workflowStages.map((stage) => ({
       ...stage,
       unlockedAt: toProjectIsoString(stage.unlockedAt),

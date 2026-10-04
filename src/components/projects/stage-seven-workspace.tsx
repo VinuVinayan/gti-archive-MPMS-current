@@ -1,4 +1,7 @@
 "use client";
+import { StageGuidance } from "./stage-guidance";
+import Link from "next/link";
+import { stageInstanceHref } from "@/lib/project-template-definitions";
 
 import { FileThumbnail } from "@/components/projects/file-thumbnail";
 
@@ -872,6 +875,9 @@ export function StageSevenWorkspace({
     router.push(`/projects/${project.id}/stages/7?${params.toString()}`, { scroll: false });
   }
 
+  const snapshot = project.stageInstances?.find(stage => stage.workspace === "PACKAGING_ACCEPTANCE");
+  const followingStage = snapshot && project.stageInstances?.find(stage => stage.order > snapshot.order);
+  const completionLabel = followingStage ? "Complete stage" : "Mark Project as Completed";
   function markProjectCompleted() {
     startPending(async () => {
       const result = await closeStageSevenProjectAction({ projectId: project.id });
@@ -879,7 +885,7 @@ export function StageSevenWorkspace({
         showErrorToast("Unable to mark the project as completed.", result.error);
         return;
       }
-      showSuccessToast(result.duplicate ? "Project was already completed." : "Project marked as completed. Archiving remains separate.");
+      showSuccessToast(followingStage ? "Stage completed. The next stage is now available." : result.duplicate ? "Project was already completed." : "Project marked as completed. Archiving remains separate.");
       setCloseConfirm(false);
       router.refresh();
     });
@@ -911,6 +917,8 @@ export function StageSevenWorkspace({
         currentUserId={currentUserId}
         fallbackRefreshIntervalMs={10_000}
       />
+      {snapshot && <StageGuidance stage={snapshot} />}
+      {data.stageCompleted && followingStage && <Link className="mb-4 block text-sm underline" href={stageInstanceHref(project.id, followingStage)}>Continue to {followingStage.name}</Link>}
       <Card className="overflow-hidden rounded-[26px] border-[#dfe6df] shadow-[0_20px_54px_rgba(23,39,28,0.055)]">
         <CardContent className="p-0">
           <div className="px-5 py-6 sm:px-7 sm:py-8 lg:px-9">
@@ -923,14 +931,14 @@ export function StageSevenWorkspace({
             {!data.units.length ? <div className="grid min-h-[360px] place-items-center rounded-[18px] border border-[#dfe6df] bg-white p-8 text-center"><div><PackageCheck className="mx-auto h-9 w-9 text-[#a7b2a9]" /><h2 className="mt-3 text-[15px] font-[740] text-[#303b33]">No approved Production Units are available.</h2><p className="mt-1 text-[10px] text-[#849087]">Stage 7 uses approved Stage 6 Production Units; the optional handover is not required.</p></div></div> : selectedUnit ? <><ProductionUnitSwitcher units={data.units} selectedUnitId={selectedUnit.id} onSelect={(unitId) => select(unitId)} /><StageSevenSummary data={data} />{selectedUnit.status === ProductionSupervisionStatus.SIGNED_OFF ? <div className="flex flex-wrap items-center gap-3 rounded-[13px] border border-[#cde3d3] bg-[#eff9f2] px-4 py-3 text-[10px] text-[#2d6f4a]"><CheckCircle2 className="h-4 w-4" /><strong>Physical Sample Accepted</strong><span>Accepted by {selectedUnit.acceptedBy || "manager"}{selectedUnit.signedOffAt ? ` on ${formatDateTime(selectedUnit.signedOffAt)}` : ""}.</span></div> : null}<div className="grid min-w-0 gap-5 min-[1360px]:grid-cols-[minmax(0,1.65fr)_minmax(380px,0.95fr)] min-[1360px]:items-start"><SampleRoundsList unit={selectedUnit} selectedRoundId={selectedRound?.id ?? null} canRequest={canRequest} canManage={data.canManage} stageCompleted={data.stageCompleted} onRequest={() => setRequestOpen(true)} onSelectRound={(roundId) => select(selectedUnit.id, roundId)} onDeleteRound={(round) => setDeleteTarget({ unitId: selectedUnit.id, round })} /><SampleRequestDetails key={selectedRound?.id ?? "none"} projectId={project.id} unit={selectedUnit} round={selectedRound} canManage={data.canManage} canReview={Boolean(selectedRound?.canReview)} stageCompleted={data.stageCompleted} onRefresh={() => router.refresh()} onRequestAnother={() => setRequestOpen(true)} /></div>{data.summary.overdueRounds ? <div className="flex items-start gap-2 rounded-[13px] border border-[#ead6ae] bg-[#fff9ed] px-4 py-3 text-[10px] leading-4 text-[#795c2b]"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#b37a21]" /><span><strong>{data.summary.overdueRounds} physical sample {data.summary.overdueRounds === 1 ? "request is" : "requests are"} overdue.</strong> Project Owner and Co-Owners receive one deduplicated alert per overdue request.</span></div> : null}</> : null}
           </div>
           <div className="flex flex-col gap-4 border-t border-[#e7ece7] bg-white px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7 lg:px-9">
-            <div className="flex items-start gap-2"><Info className="mt-0.5 h-4 w-4 shrink-0 text-[#4f8062]" /><div><p className="text-[11px] font-[720] text-[#354138]">Project completion is manual once every physical Production Unit sample is accepted.</p><p className="mt-0.5 text-[9px] text-[#849087]">Completing the project finishes Stage 7. Archiving remains a separate action.</p></div></div>
-            {data.stageCompleted ? <Badge className="bg-[#e4f2e7] text-[#2e744e]">Project Completed</Badge> : data.canManage ? <Button type="button" className="rounded-[12px]" disabled={!canClose || pending} onClick={() => { if (!canClose) { showErrorToast("All physical Production Unit samples must be accepted before the project can be completed.", remainingUnits.length ? `Remaining: ${remainingUnits.map((unit) => unit.name).join(", ")}.` : undefined); return; } setCloseConfirm(true); }}><CheckCircle2 className="h-4 w-4" /> Mark Project as Completed</Button> : null}
+            <div className="flex items-start gap-2"><Info className="mt-0.5 h-4 w-4 shrink-0 text-[#4f8062]" /><div><p className="text-[11px] font-[720] text-[#354138]">{followingStage ? "Complete this stage once every physical Production Unit sample is accepted." : "Project completion is manual once every physical Production Unit sample is accepted."}</p><p className="mt-0.5 text-[9px] text-[#849087]">{followingStage ? `Next: ${followingStage.name}. The project remains open.` : "Completing the project finishes Stage 7. Archiving remains a separate action."}</p></div></div>
+            {data.stageCompleted ? <Badge className="bg-[#e4f2e7] text-[#2e744e]">{followingStage ? "Stage Completed" : "Project Completed"}</Badge> : data.canManage ? <Button type="button" className="rounded-[12px]" disabled={!canClose || pending} onClick={() => { if (!canClose) { showErrorToast("All physical Production Unit samples must be accepted before the project can be completed.", remainingUnits.length ? `Remaining: ${remainingUnits.map((unit) => unit.name).join(", ")}.` : undefined); return; } setCloseConfirm(true); }}><CheckCircle2 className="h-4 w-4" /> {completionLabel}</Button> : null}
           </div>
         </CardContent>
       </Card>
       {requestOpen && selectedUnit ? <NewSampleRequestDialog projectId={project.id} unit={selectedUnit} participants={data.participants} onClose={() => setRequestOpen(false)} onCreated={(roundId) => select(selectedUnit.id, roundId)} /> : null}
       <ConfirmationDialog isOpen={Boolean(deleteTarget)} title="Delete physical sample request?" description={deleteTarget ? `This permanently removes Round ${deleteTarget.round.sequence} — ${deleteTarget.round.name}. The recipient will no longer be able to open this request.` : "This permanently removes the selected physical sample request."} confirmLabel="Delete Request" tone="destructive" pending={pending} onConfirm={deleteSampleRequest} onClose={() => setDeleteTarget(null)} />
-      <ConfirmationDialog isOpen={closeConfirm} title="Mark Project as Completed?" description="Every physical Production Unit sample has been accepted. Completing the project finishes Stage 7; Archive remains separate." confirmLabel="Mark Project as Completed" pending={pending} onConfirm={markProjectCompleted} onClose={() => setCloseConfirm(false)} />
+      <ConfirmationDialog isOpen={closeConfirm} title={`${completionLabel}?`} description={followingStage ? `Every physical Production Unit sample has been accepted. Complete this stage to continue to ${followingStage.name}.` : "Every physical Production Unit sample has been accepted. Completing the project finishes Stage 7; Archive remains separate."} confirmLabel={completionLabel} pending={pending} onConfirm={markProjectCompleted} onClose={() => setCloseConfirm(false)} />
     </section>
   );
 }
