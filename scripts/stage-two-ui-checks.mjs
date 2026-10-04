@@ -335,8 +335,8 @@ assert(
 assert(
   overview.includes("const stageOpenable = !locked") &&
     !overview.includes("Available · Stage UI coming next") &&
-    overview.includes("Complete Stage ${stage.number - 1} to unlock Stage ${stage.number}."),
-  "Overview must expose all seven implemented routes only for available/completed cards and explain locked progression.",
+    overview.includes("Complete Stage ${stage.order - 1} to unlock Stage ${stage.order}."),
+  "Overview must expose all configured stage routes only for available/completed cards and explain locked progression.",
 );
 
 console.log("Stage 2 connected UI and architecture checks passed.");

@@ -16,7 +16,6 @@ import {
   type ProjectListRole,
   type ProjectListStatus,
 } from "@/lib/project-list-workflow";
-import { PROJECT_WORKFLOW_STAGE_DEFINITIONS } from "@/lib/project-workflow";
 import {
   getDashboardProjectCounts,
   getProjectListFilterOptions,
@@ -68,7 +67,7 @@ function normalizeRole(value: string | undefined): ProjectListRole {
 
 function normalizeStage(value: string | undefined) {
   const stage = Number.parseInt(value ?? "", 10);
-  return stage >= 1 && stage <= PROJECT_WORKFLOW_STAGE_DEFINITIONS.length
+  return stage >= 1 && Number.isSafeInteger(stage)
     ? stage
     : null;
 }
@@ -188,10 +187,7 @@ export default async function ProjectsPage({
         query={data.query}
         ownerOptions={data.filterOptions.owners}
         executorOptions={data.filterOptions.executors}
-        stageOptions={PROJECT_WORKFLOW_STAGE_DEFINITIONS.map((stage) => ({
-          number: stage.number,
-          name: stage.name,
-        }))}
+        stageOptions={data.filterOptions.stages}
         filters={projectFilters}
       />
     </DashboardLayout>

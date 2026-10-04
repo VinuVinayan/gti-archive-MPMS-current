@@ -115,12 +115,12 @@ for (const stageNumber of [1, 2, 5, 6]) {
   );
   includes(
     page,
-    "!isBusinessAdministratorRole(user.role)",
+    "requirePackagingStageRoute",
     `Stage ${stageNumber} USER route gate`,
   );
   includes(
     page,
-    "redirect(`/projects/${slug}`)",
+    "requirePackagingStageRoute(slug, user,",
     `Stage ${stageNumber} USER workspace redirect`,
   );
 }
@@ -191,3 +191,5 @@ console.log("Final ADMIN/USER cross-layer permission regression checks passed.")
 
 includes(read("src/app/(dashboard)/projects/[slug]/stages/7/page.tsx"), "getStageSevenWorkspaceData", "Stage 7 must use its scoped service authorization");
 includes(read("src/lib/stage-seven.ts"), "getAuthorizedStageSevenProject", "Stage 7 data must enforce project authorization");
+
+includes(read("src/lib/project-template-route-access.ts"), "canManageProjectStages(user, project)", "Packaging routes must require management authority independently from executor membership");

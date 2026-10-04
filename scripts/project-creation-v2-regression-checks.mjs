@@ -75,7 +75,7 @@ for (const snippet of [
   "skipDuplicates: true",
   "ensureCanonicalProjectResearchWorkspaceTx",
   'type: "COLLABORATOR_ADDED"',
-  'const notificationUrl = `/projects/${project.id}/stages/1`',
+  'const notificationUrl = `/projects/${project.id}`',
   "tx.notification.createMany",
 ]) {
   assertIncludes(creation, snippet, `Creation service guard ${snippet}`);

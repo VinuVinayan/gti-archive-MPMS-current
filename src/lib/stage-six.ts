@@ -270,7 +270,9 @@ function stageStatus(project: StageProject, key: ProjectWorkflowStageKey) {
 
 export function canManageStageSix(user: PermissionUser, project: StageProject) {
   return (
-    isGlobalProjectAdministrator(user) &&
+    (isProjectOwner(user, project) ||
+      isProjectCoOwner(user, project) ||
+      isGlobalProjectAdministrator(user)) &&
     hasProjectPermission(user, project, "stage.view")
   );
 }
@@ -883,7 +885,9 @@ export async function completeStageFive(
           });
           if (!project) return { error: "Project not found." } as const;
           const manager =
-            isGlobalProjectAdministrator(user) &&
+            (isProjectOwner(user, project) ||
+              isProjectCoOwner(user, project) ||
+              isGlobalProjectAdministrator(user)) &&
             hasProjectPermission(user, project, "stage.markStageComplete");
           if (!manager) {
             return { error: "You do not have permission to complete Stage 5." } as const;

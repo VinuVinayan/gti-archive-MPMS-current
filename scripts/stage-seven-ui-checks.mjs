@@ -22,7 +22,7 @@ const [workspace, sampleActions, realtimeGuard, page, actions, service, dashboar
   ]);
 
 for (const content of [
-  "Stage 7 – Implementation &amp; Supervision",
+  "Stage ${snapshot.order} – ${snapshot.name}",
   "Request, track, and accept physical production samples",
   "Production Units",
   "Waiting for Sample",

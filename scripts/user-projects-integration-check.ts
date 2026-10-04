@@ -278,6 +278,7 @@ async function main() {
         completedAt,
       },
     });
+    await prisma.projectStageInstance.updateMany({ where: { projectId: completedProjectId, retiredAt: null }, data: { status: "COMPLETED", unlockedAt: completedAt, completedAt } });
     await prisma.project.update({
       where: { id: completedProjectId },
       data: { completedAt },

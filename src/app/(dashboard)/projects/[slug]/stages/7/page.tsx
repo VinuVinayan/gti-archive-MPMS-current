@@ -1,3 +1,6 @@
+import { redirect } from "next/navigation";
+import { getProjectStageAccessRecordById } from "@/lib/project-stage-data";
+import { canManageProjectStages } from "@/lib/project-templates";
 import { requirePackagingStageRoute } from "@/lib/project-template-route-access";
 import { Suspense } from "react";
 import { ProjectWorkflowStageKey } from "@prisma/client";
@@ -49,6 +52,8 @@ async function StageSevenContent({
   selectedRoundId?: string;
 }) {
   const user = await userPromise;
+  const access = await getProjectStageAccessRecordById(slug);
+  if (access && selectedRoundId && !canManageProjectStages(user,access)) redirect(`/tasks/samples/${selectedRoundId}`);
   await requirePackagingStageRoute(slug, user, 7);
 
   const project = await getProjectStageShellById(slug, user);

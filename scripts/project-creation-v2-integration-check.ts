@@ -336,8 +336,8 @@ async function main() {
       created.priority === null &&
       created.startDate === null &&
       created.endDate === null &&
-      created.stageCount === null,
-    "V2 creation must not persist fabricated legacy defaults.",
+      created.stageCount === 8,
+    "V2 creation must use its template count without fabricating business data.",
   );
 
   const notifications = await prisma.notification.findMany({
@@ -353,8 +353,8 @@ async function main() {
     "Additional collaborators must receive COLLABORATOR_ADDED notifications.",
   );
   assert(
-    notifications.every((item) => item.url === `/projects/${created.id}/stages/1`),
-    "Every new project assignment notification must initially link to active Stage 1.",
+    notifications.every((item) => item.url === `/projects/${created.id}`),
+    "Assignment notifications must use the role-aware project landing route.",
   );
 
   const legacyAssignmentNotifications = notifications.filter(

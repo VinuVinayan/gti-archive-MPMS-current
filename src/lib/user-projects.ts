@@ -293,6 +293,7 @@ export async function getUserProjectsList(
           owner: {
             select: { id: true, name: true, email: true },
           },
+          stageInstances: { where: { retiredAt: null }, orderBy: { order: "asc" }, select: { order: true, name: true, status: true } },
           workflowStages: {
             select: {
               stageKey: true,

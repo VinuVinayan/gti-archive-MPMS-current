@@ -277,7 +277,7 @@ assert(
 );
 
 assert(
-  overview.includes("href={`/projects/${projectId}/stages/${stage.number}`}") &&
+  overview.includes("href={stageInstanceHref(projectId, stage)}") &&
     overview.includes("const stageOpenable = !locked"),
   "The overview CTA should open the dedicated implemented stage route.",
 );
@@ -303,9 +303,8 @@ assert(
   "Stage 1 manager reads and option queries must enforce effective stage visibility.",
 );
 assert(
-  stagePage.includes("!isBusinessAdministratorRole(user.role)") &&
-    stagePage.includes("redirect(`/projects/${slug}`)"),
-  "Related USERS must be redirected from the Stage 1 manager route.",
+  stagePage.includes("requirePackagingStageRoute(slug, user, 1)"),
+  "Stage 1 must use ownership-aware stage management authorization.",
 );
 assert(service.includes("prisma.$transaction"), "Stage 1 completion must be transactional.");
 assert(

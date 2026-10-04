@@ -20,6 +20,8 @@ import { sendResendEmail } from "@/lib/email/resend";
 import {
   hasProjectPermission,
   isGlobalProjectAdministrator,
+  isProjectOwner,
+  isProjectCoOwner,
   type PermissionUser,
 } from "@/lib/permissions/resolver";
 import { prisma, withPrismaRetry } from "@/lib/prisma";
@@ -139,7 +141,9 @@ export function canManageStageSeven(
   project: StageProject,
 ) {
   return (
-    isGlobalProjectAdministrator(user) &&
+    (isProjectOwner(user, project) ||
+      isProjectCoOwner(user, project) ||
+      isGlobalProjectAdministrator(user)) &&
     hasProjectPermission(user, project, "stage.view")
   );
 }
@@ -970,7 +974,7 @@ async function ensureInternalSampleRequestNotification(
     entityType: NotificationEntityType.SAMPLE_ROUND,
     entityId: input.roundId,
     projectId: input.projectId,
-    url: `/projects/${input.projectId}/stages/7?unit=${input.productionUnitId}&round=${input.roundId}`,
+    url: `/tasks/samples/${input.roundId}`,
   } as const;
 
   await tx.notification.upsert({
@@ -1727,4 +1731,17 @@ export async function processStageSevenOverdueDeadlines(now = new Date()) {
     );
   }
   return { scannedRounds: rounds.length, attemptedNotifications: notifications.length };
+}
+
+/** Tasker entry point: only the assigned recipient and the requested sample. */
+export async function getAssignedPhysicalSampleTask(user: PermissionUser, roundId: string) {
+  const round = await prisma.productionSampleRound.findFirst({
+    where: { id: roundId, recipientUserId: user.id },
+    select: { projectId: true, name: true, supervision: { select: { productionUnitId: true } }, project: { select: { name: true } } },
+  });
+  if (!round) return null;
+  const data = await getStageSevenWorkspaceData(user, round.projectId, round.supervision.productionUnitId, roundId);
+  const unit = data?.units.find(unit => unit.id === round.supervision.productionUnitId);
+  if (!data || !unit || !unit.rounds.some(round => round.id === roundId)) return null;
+  return { projectId: round.projectId, projectName: round.project.name, name: round.name, stageCompleted: data.stageCompleted, unit: { ...unit, rounds: unit.rounds.filter(round => round.id === roundId) } };
 }

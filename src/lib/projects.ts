@@ -468,6 +468,7 @@ export type ProjectListUserFilterOption = {
 };
 
 export type ProjectListFilterOptions = {
+  stages: Array<{ number: number; name: string }>;
   owners: ProjectListUserFilterOption[];
   executors: ProjectListUserFilterOption[];
 };
@@ -1987,6 +1988,7 @@ export async function getProjectListFilterOptions(
 ): Promise<ProjectListFilterOptions> {
   if (!canUseProjects(currentUser)) {
     return {
+      stages: [],
       owners: [],
       executors: [],
     };
@@ -2003,6 +2005,7 @@ export async function getProjectListFilterOptions(
         prisma.project.findMany({
           where: accessibleWhere,
           select: {
+            stageInstances: { where: { retiredAt: null }, select: { order: true, name: true } },
             owner: {
               select: {
                 id: true,
@@ -2054,7 +2057,13 @@ export async function getProjectListFilterOptions(
 
   }
 
+  const stageNames = new Map<number, Set<string>>();
+  for (const project of projects) for (const stage of project.stageInstances) {
+    const names = stageNames.get(stage.order) ?? new Set<string>();
+    names.add(stage.name); stageNames.set(stage.order,names);
+  }
   const options = {
+    stages: [...stageNames].sort(([a],[b])=>a-b).map(([number,names])=>({number,name:names.size===1 ? [...names][0] : "Across project templates"})),
     owners: sortProjectListUserFilterOptions([...owners.values()]),
     executors: sortProjectListUserFilterOptions([...executors.values()]),
   };

@@ -633,7 +633,7 @@ function SampleRoundsList({
   );
 }
 
-function SampleRequestDetails({
+export function SampleRequestDetails({
   projectId,
   unit,
   round,
@@ -923,7 +923,7 @@ export function StageSevenWorkspace({
         <CardContent className="p-0">
           <div className="px-5 py-6 sm:px-7 sm:py-8 lg:px-9">
             <div className="flex items-center gap-2 text-[11px] font-[760] uppercase tracking-[0.13em] text-[#4d765d]"><PackageCheck className="h-4 w-4" /> Implementation &amp; Supervision</div>
-            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><h1 className="text-[28px] font-[780] tracking-[-0.04em] text-[#111713] sm:text-[34px]">Stage 7 – Implementation &amp; Supervision</h1><Badge variant="secondary" className="w-fit border-[#cfe0d3] bg-[#eaf4ed] px-3 py-1.5 text-[10px] text-[#2f7751]">{headerStatus}</Badge></div>
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><h1 className="text-[28px] font-[780] tracking-[-0.04em] text-[#111713] sm:text-[34px]">{snapshot ? `Stage ${snapshot.order} – ${snapshot.name}` : "Stage 7 – Implementation & Supervision"}</h1><Badge variant="secondary" className="w-fit border-[#cfe0d3] bg-[#eaf4ed] px-3 py-1.5 text-[10px] text-[#2f7751]">{headerStatus}</Badge></div>
             <p className="mt-2 text-[13px] leading-5 text-[#6f7a72]">Request, track, and accept physical production samples for each approved Production Unit.</p>
             <ProjectStageSummary project={project} />
           </div>

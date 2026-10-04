@@ -24,6 +24,7 @@ import {
 function revalidateStageSeven(projectId: string) {
   revalidatePath(`/projects/${projectId}`);
   revalidatePath(`/projects/${projectId}/stages/7`);
+  revalidatePath("/tasks", "layout");
 }
 
 function publishStageSevenChange(input: {

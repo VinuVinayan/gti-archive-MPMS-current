@@ -99,8 +99,7 @@ function PersonAvatar({ person, size = "md" }: { person: ProjectCardPerson; size
 
 function WorkflowProgress({ project }: { project: ProjectCardItem }) {
   return (
-    <div className="relative mt-4 grid grid-cols-7 items-center" aria-label={`Stage ${project.currentStageNumber} of 7`}>
-      <span className="absolute left-[7%] right-[7%] top-[13px] h-px bg-[#dce3dc]" aria-hidden="true" />
+    <div className="relative mt-4 flex flex-wrap items-center gap-2" aria-label={`Stage ${project.currentStageNumber} of ${project.stageStatuses.length}`}>
       {project.stageStatuses.map((stageStatus, index) => {
         const stageNumber = index + 1;
         const completed = stageStatus === "COMPLETED";
@@ -239,7 +238,7 @@ export function ProjectCard({ project, returnHref }: ProjectCardProps) {
           </h2>
           {project.currentStageNumber && project.currentStageName ? (
             <p className="mt-1 text-[12px] text-[#6c746d]">
-              Stage {project.currentStageNumber} of 7 · {project.currentStageName}
+              Stage {project.currentStageNumber} of {project.stageStatuses.length} · {project.currentStageName}
             </p>
           ) : null}
 

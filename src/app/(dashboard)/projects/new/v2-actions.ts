@@ -1,5 +1,6 @@
 "use server";
 
+import { ProjectTemplateError } from "@/lib/project-template-definitions";
 import { randomUUID } from "node:crypto";
 import { revalidatePath, revalidateTag } from "next/cache";
 
@@ -48,6 +49,7 @@ export async function createProjectV2Action(
 
     return result;
   } catch (error) {
+    if (error instanceof ProjectTemplateError) return { error: error.message, fieldErrors: { templateKey: error.message } };
     console.error("[projects] V2 project creation failed", error);
 
     return {

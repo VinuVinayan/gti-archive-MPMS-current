@@ -24,6 +24,8 @@ import { sendResendEmail } from "@/lib/email/resend";
 import {
   hasProjectPermission,
   isGlobalProjectAdministrator,
+  isProjectOwner,
+  isProjectCoOwner,
   type PermissionUser,
 } from "@/lib/permissions/resolver";
 import { prisma, withPrismaRetry } from "@/lib/prisma";
@@ -165,7 +167,9 @@ export function canManageStageFive(
   project: StageFiveProject,
 ) {
   return (
-    isGlobalProjectAdministrator(user) &&
+    (isProjectOwner(user, project) ||
+      isProjectCoOwner(user, project) ||
+      isGlobalProjectAdministrator(user)) &&
     hasProjectPermission(user, project, "file.uploadAttachment")
   );
 }

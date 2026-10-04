@@ -108,8 +108,8 @@ assert.match(
 );
 assert.match(researchAccess, /canManageWorkspace = isGlobalAdministrator \|\| isProjectOwner \|\| isProjectCoOwner/);
 assert.match(researchAccess, /canUpload:\s*isCanonicalWorkspace &&\s*stageAvailable &&\s*\(canManageWorkspace \|\| isCanonicalSharedFolder\) &&\s*!isProjectCompleted/);
-assert.match(stageTwoPage, /!isBusinessAdministratorRole\(user\.role\)/);
-assert.match(stageTwoPage, /redirect\(`\/projects\/\$\{slug\}`\)/);
+assert.match(stageTwoPage, /requirePackagingStageRoute\(slug, user, 2\)/);
+assert.match(readFileSync("src/lib/project-template-route-access.ts", "utf8"), /canManageProjectStages/);
 assert.match(stageTwoFolderPage, /getProjectResearchFolderPageData\(user,/);
 assert.match(conceptRoute, /user\.role === UserRole\.USER/);
 assert.match(conceptRoute, /stageNeutral: true/);

@@ -834,7 +834,7 @@ async function processStageSevenReminder(
     message: round.requestNote,
     referenceFiles,
     actionUrl: round.recipientUserId
-      ? `${getApplicationUrl()}/projects/${round.projectId}/stages/7?unit=${unit.id}&round=${round.id}`
+      ? `${getApplicationUrl()}/tasks/samples/${round.id}`
       : referenceFiles[0]?.url ?? getApplicationUrl(),
     actionLabel: round.recipientUserId
       ? "Open Sample Request"
@@ -895,7 +895,7 @@ async function processStageSevenReminder(
           entityType: NotificationEntityType.SAMPLE_ROUND,
           entityId: round.id,
           projectId: round.projectId,
-          url: `/projects/${round.projectId}/stages/7?unit=${unit.id}&round=${round.id}`,
+          url: `/tasks/samples/${round.id}`,
           dedupeKey,
         },
       }),

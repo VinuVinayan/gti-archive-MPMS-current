@@ -36,7 +36,7 @@ export function StageRouteShell({
           {eyebrow}
         </div>
         <h1 className="mt-3 text-[30px] font-[790] leading-[1.12] tracking-[-0.045em] text-[#111713] sm:text-[38px]">
-          {title}
+          {activeStage ? `Stage ${activeStage.order} - ${activeStage.name}` : title}
         </h1>
         {description ? (
           <p className="mt-2 text-[13px] leading-5 text-[#68736b]">

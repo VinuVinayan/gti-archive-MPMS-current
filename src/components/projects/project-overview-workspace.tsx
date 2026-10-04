@@ -217,7 +217,7 @@ export function ProjectOverviewLoadingShell() {
         <Skeleton className="h-6 w-36 rounded-full" />
         <Skeleton className="mt-2 h-3.5 w-full max-w-[560px] rounded-full" />
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-          {Array.from({ length: 7 }).map((_, index) => (
+          {Array.from({ length: 6 }).map((_, index) => (
             <Skeleton key={index} className="h-[260px] rounded-[20px]" />
           ))}
         </div>

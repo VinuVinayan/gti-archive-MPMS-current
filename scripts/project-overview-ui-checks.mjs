@@ -70,7 +70,7 @@ assert(
   "Project summary values must remain visually prominent beneath their compact labels.",
 );
 assert(
-  overview.includes("min-h-[210px]") &&
+  overview.includes("h-[260px]") &&
     overview.includes("line-clamp-2") &&
     overview.includes('className="h-10') &&
     overview.includes('className="mt-4 grid gap-3'),
@@ -79,23 +79,23 @@ assert(
 
 assert(
   overview.includes("const stageOpenable = !locked"),
-  "All seven stages must be openable only when persisted status permits.",
+  "All configured stages must be openable only when persisted status permits.",
 );
 assert(overview.includes("Open Stage"), "Implemented stages should show the Open Stage CTA.");
 assert(
-  overview.includes("href={`/projects/${projectId}/stages/${stage.number}`}"),
+  overview.includes("href={stageInstanceHref(projectId, stage)}"),
   "Implemented stages should open their dedicated UI route.",
 );
 assert(overview.includes("status === \"AVAILABLE\""), "Available state must come from persisted workflow status.");
 assert(overview.includes("status === \"COMPLETED\""), "Completed state must come from persisted workflow status.");
 assert(
   !overview.includes("Available · Stage UI coming next"),
-  "All seven implemented stages must use their real route when available.",
+  "All configured stages must use their real route when available.",
 );
 assert(overview.includes("disabled"), "Unavailable stage controls should be disabled.");
 assert(overview.includes("Locked"), "Locked workflow stages should show their real state.");
 assert(
-  overview.includes("Complete Stage ${stage.number - 1} to unlock Stage ${stage.number}.") &&
+  overview.includes("Complete Stage ${stage.order - 1} to unlock Stage ${stage.order}.") &&
     !overview.includes("canBypassLocked"),
   "Locked cards must explain progression and must not expose a runtime bypass.",
 );

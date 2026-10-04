@@ -27,7 +27,6 @@ import {
   deriveProjectListWorkflowState,
   type ProjectListWorkflowState,
 } from "@/lib/project-list-workflow";
-import { PROJECT_WORKFLOW_STAGE_DEFINITIONS } from "@/lib/project-workflow";
 import {
   canUseProjects,
   hasPermission,
@@ -1283,17 +1282,13 @@ async function buildDashboardSnapshot(
       ...formatDeadline(dueAtDate, now),
     }));
 
-  const stages = PROJECT_WORKFLOW_STAGE_DEFINITIONS.map((stage) => ({
-    number: stage.number,
-    name: stage.name,
-    count: summaries.filter(
-      ({ project, workflow }) =>
-        workflow.businessStatus === "ACTIVE" &&
-        !project.archivedAt &&
-        workflow.currentStageNumber === stage.number,
-    ).length,
-    href: `/projects?status=ACTIVE&stage=${stage.number}`,
-  }));
+  const activeSummaries = summaries.filter(({project,workflow}) => workflow.businessStatus === "ACTIVE" && !project.archivedAt);
+  const stageNumbers = [...new Set(activeSummaries.map(({workflow})=>workflow.currentStageNumber).filter((number):number is number=>number!==null))].sort((a,b)=>a-b);
+  const stages = stageNumbers.map(number => {
+    const matching = activeSummaries.filter(({workflow})=>workflow.currentStageNumber===number);
+    const names = [...new Set(matching.map(({workflow})=>workflow.currentStageName))];
+    return { number, name: names.length===1 ? names[0]! : "Across project templates", count: matching.length, href: `/projects?status=ACTIVE&stage=${number}` };
+  });
 
   const flexibleProjectCards = flexibleProjects.slice(0, 3).map((project) => {
     const totalMilestones = project.milestones.length;

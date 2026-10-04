@@ -46,6 +46,7 @@ type CreateProjectFormProps = {
 };
 
 type FormErrors = {
+  template?: string;
   name?: string;
   owner?: string;
   coOwners?: string;
@@ -272,6 +273,7 @@ export function CreateProjectForm({
 
       if ("error" in result) {
         setErrors({
+          template: result.fieldErrors?.templateKey,
           name: result.fieldErrors?.name,
           owner: result.fieldErrors?.ownerId,
           coOwners: result.fieldErrors?.coOwnerIds,
@@ -316,10 +318,11 @@ export function CreateProjectForm({
       <form onSubmit={handleSubmit} noValidate className="mt-7 sm:mt-8">
         {!isEditing && <section className="mb-6 rounded-[22px] border border-[#d9e0d9] bg-white p-6">
           <label htmlFor="project-template" className="text-sm font-bold">Project Type / Template *</label>
-          <select id="project-template" required value={templateKey} onChange={e=>setTemplateKey(e.target.value as TemplateKey)} className="mt-2 block w-full rounded-xl border p-3">
+          <select id="project-template" aria-invalid={Boolean(errors.template)} required value={templateKey} onChange={e=>setTemplateKey(e.target.value as TemplateKey)} className="mt-2 block w-full rounded-xl border p-3">
             <option value="">Choose a template</option>
             {templates.map(template=><option key={template.key} value={template.key}>{template.name}</option>)}
           </select>
+          {errors.template && <p className="mt-2 text-sm text-red-700">{errors.template}</p>}
           {selectedTemplate && <div className="mt-5">
             <p className="mb-3 text-sm text-[#68736b]">{selectedTemplate.name} · Version {selectedTemplate.version.version}. This project keeps its own stage configuration.</p>
             {templateKey === "CUSTOM" ? <>
@@ -418,7 +421,7 @@ export function CreateProjectForm({
                     Manage this project myself
                   </span>
                   <span className="mt-1 block text-[12px] leading-5 text-[#6f7b72]">
-                    No executor will be assigned. Empty Stages 3 and 4 can be skipped, then the final file can be uploaded directly in Stage 5.
+                    {templateKey === "PACKAGING" ? "No executor will be assigned. Empty Stages 3 and 4 can be skipped, then the final file can be uploaded directly in Stage 5." : "You and the co-owners will manage the project stages. No executor will be assigned."}
                   </span>
                 </span>
               </button>

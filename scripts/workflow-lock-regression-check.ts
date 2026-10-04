@@ -147,11 +147,11 @@ assert(!accessPolicy.includes("searchParams"), "Workflow locks must not have a q
 
 const overview = source("src/components/projects/project-overview-workspace.tsx");
 assert(overview.includes("const stageOpenable = !locked"));
-assert(overview.includes("Complete Stage ${stage.number - 1} to unlock Stage ${stage.number}."));
+assert(overview.includes("Complete Stage ${stage.order - 1} to unlock Stage ${stage.order}."));
 assert(!overview.includes("canBypassLocked"));
 assert(!overview.includes("canBypassLockedStage"));
 assert.equal(
-  overview.match(/href=\{`\/projects\/\$\{projectId\}\/stages\/\$\{stage\.number\}`\}/g)?.length,
+  overview.match(/href=\{stageInstanceHref\(projectId, stage\)\}/g)?.length,
   1,
   "A stage card may expose only the guarded Open Stage href.",
 );

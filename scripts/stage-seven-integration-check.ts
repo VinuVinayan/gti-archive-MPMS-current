@@ -25,6 +25,7 @@ import {
   deleteProductionSampleRound,
   decidePhysicalSampleRound,
   getStageSevenWorkspaceData,
+  getAssignedPhysicalSampleTask,
   markPhysicalSampleRoundReceived,
   processStageSevenOverdueDeadlines,
   retryProductionSampleRequestEmail,
@@ -587,7 +588,7 @@ async function main() {
         (notification) =>
           notification.title === "Physical sample requested" &&
           notification.targetHref ===
-            `/projects/${ids.project}/stages/7?unit=${units[1].id}&round=${recipientDecisionRound.id}`,
+            `/tasks/samples/${recipientDecisionRound.id}`,
       ),
       "the repaired request notification must appear in the recipient inbox and link to the assigned request",
     );
@@ -673,9 +674,12 @@ async function main() {
       requestNotifications.length === 1 &&
         requestNotifications[0].userId === ids.executor &&
         requestNotifications[0].entityType === "SAMPLE_ROUND" &&
-        requestNotifications[0].url === `/projects/${ids.project}/stages/7?unit=${units[1].id}&round=${overdueRound.id}`,
+        requestNotifications[0].url === `/tasks/samples/${overdueRound.id}`,
       "the selected internal recipient must receive one notification linked to the assigned request",
     );
+    const sampleTask = await getAssignedPhysicalSampleTask(executor, overdueRound.id);
+    check(sampleTask?.unit.rounds.length === 1 && sampleTask.unit.rounds[0].id === overdueRound.id, "Tasker must expose only the assigned sample request");
+    check(await getAssignedPhysicalSampleTask(collaborator, overdueRound.id) === null, "unassigned users must not open a sample task");
     const recipientWorkspace = await getStageSevenWorkspaceData(
       executor,
       ids.project,
