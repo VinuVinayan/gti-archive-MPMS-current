@@ -139,7 +139,8 @@ for (const deepLink of [
   assert(service.includes(deepLink), `Action deep link is missing: ${deepLink}`);
 }
 assert(
-  service.includes("/projects?status=ACTIVE&stage=${stage.number}"),
+  service.includes("/projects?status=ACTIVE&stage=${number}") &&
+    service.includes("workflow.currentStageNumber"),
   "Stage distribution must use the Projects V2 stage filter convention.",
 );
 assert(

@@ -1,0 +1,264 @@
+{
+  "base": "450452e1906a2b62ccef7e43ecfd52931f98792e",
+  "environment": "isolated local PostgreSQL 17; no production database access",
+  "checks": [
+    {
+      "name": "layout:ui-check",
+      "status": 0
+    },
+    {
+      "name": "navigation:ui-check",
+      "status": 0
+    },
+    {
+      "name": "notifications:realtime-check",
+      "status": 0
+    },
+    {
+      "name": "submission:realtime-check",
+      "status": 0
+    },
+    {
+      "name": "archive:access-level-check",
+      "status": 0
+    },
+    {
+      "name": "archive:edit-check",
+      "status": 0
+    },
+    {
+      "name": "archive:edit-integration-check",
+      "status": 0
+    },
+    {
+      "name": "archive:direct-wizard-check",
+      "status": 0
+    },
+    {
+      "name": "flow:check",
+      "status": 0
+    },
+    {
+      "name": "flux-ai:archive-finder-check",
+      "status": 0
+    },
+    {
+      "name": "flux-ai:archive-search-integration-check",
+      "status": 0
+    },
+    {
+      "name": "phase0:check",
+      "status": 0
+    },
+    {
+      "name": "phase3:check",
+      "status": 0
+    },
+    {
+      "name": "project-create:role-check",
+      "status": 0
+    },
+    {
+      "name": "project-create:v2-check",
+      "status": 0
+    },
+    {
+      "name": "projects:v2-check",
+      "status": 0
+    },
+    {
+      "name": "projects:user-check",
+      "status": 0
+    },
+    {
+      "name": "projects:user-integration-check",
+      "status": 0
+    },
+    {
+      "name": "projects:flexible-integration-check",
+      "status": 0
+    },
+    {
+      "name": "project-workspace:user-check",
+      "status": 0
+    },
+    {
+      "name": "project-workspace:user-integration-check",
+      "status": 0
+    },
+    {
+      "name": "project-list:workflow-check",
+      "status": 0
+    },
+    {
+      "name": "project-tracker:spreadsheet-check",
+      "status": 0
+    },
+    {
+      "name": "workflow:lock-check",
+      "status": 0
+    },
+    {
+      "name": "dashboard:v2-check",
+      "status": 0
+    },
+    {
+      "name": "project-create:v2-integration-check",
+      "status": 0
+    },
+    {
+      "name": "project-overview:ui-check",
+      "status": 0
+    },
+    {
+      "name": "project-inquiry:check",
+      "status": 0
+    },
+    {
+      "name": "project-inquiry:contact-validation-check",
+      "status": 0
+    },
+    {
+      "name": "project-owner:workflow-check",
+      "status": 0
+    },
+    {
+      "name": "stage-one:ui-check",
+      "status": 0
+    },
+    {
+      "name": "stage-two:ui-check",
+      "status": 0
+    },
+    {
+      "name": "concept-stage:ui-check",
+      "status": 0
+    },
+    {
+      "name": "concept-chat:ui-check",
+      "status": 0
+    },
+    {
+      "name": "concept-round-three:ui-check",
+      "status": 0
+    },
+    {
+      "name": "concept-round-four:ui-check",
+      "status": 0
+    },
+    {
+      "name": "stage-five:ui-check",
+      "status": 0
+    },
+    {
+      "name": "stage-five:integration-check",
+      "status": 0
+    },
+    {
+      "name": "stage-six:ui-check",
+      "status": 0
+    },
+    {
+      "name": "stage-six:approval-check",
+      "status": 0
+    },
+    {
+      "name": "stage-six:integration-check",
+      "status": 0
+    },
+    {
+      "name": "stage-seven:ui-check",
+      "status": 0
+    },
+    {
+      "name": "stage-seven:integration-check",
+      "status": 0
+    },
+    {
+      "name": "request-reminders:check",
+      "status": 0
+    },
+    {
+      "name": "request-reminders:integration-check",
+      "status": 0
+    },
+    {
+      "name": "rich-text:ui-check",
+      "status": 0
+    },
+    {
+      "name": "autosave:ui-check",
+      "status": 0
+    },
+    {
+      "name": "users:avatar-check",
+      "status": 0
+    },
+    {
+      "name": "user-role:foundation-check",
+      "status": 0
+    },
+    {
+      "name": "admin-authority:round2-check",
+      "status": 0
+    },
+    {
+      "name": "permissions:final-check",
+      "status": 0
+    },
+    {
+      "name": "permissions:final-integration-check",
+      "status": 0
+    },
+    {
+      "name": "development-data:reset-check",
+      "status": 0
+    },
+    {
+      "name": "concept-stage:completion-check",
+      "status": 0
+    },
+    {
+      "name": "concept-stage:integration-check",
+      "status": 0
+    },
+    {
+      "name": "concept-round-four:integration-check",
+      "status": 0
+    },
+    {
+      "name": "stage-three-five:e2e-qa",
+      "status": 0
+    },
+    {
+      "name": "stage-two:folders-check",
+      "status": 0
+    },
+    {
+      "name": "stage-two:import-check",
+      "status": 0
+    },
+    {
+      "name": "stage-two:integration-check",
+      "status": 0
+    },
+    {
+      "name": "templates:integration-check",
+      "status": 0
+    },
+    {
+      "name": "prisma:client-check",
+      "status": 0
+    }
+  ],
+  "validation": {
+    "frozenInstall": "passed; pnpm 10.34.6; unchanged dependency versions",
+    "prismaGenerate": "passed",
+    "prismaValidate": "passed",
+    "isolatedMigrationReplay": "passed; active and completed historical fixtures",
+    "lint": "passed",
+    "typecheck": "passed",
+    "productionBuild": "passed; Next.js 16.2.6",
+    "chromium": "passed; create, preview, progression, permissions, approval; 1440/768/390 px; no browser errors"
+  }
+}
